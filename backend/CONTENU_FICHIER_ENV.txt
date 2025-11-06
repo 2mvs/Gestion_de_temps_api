@@ -1,0 +1,112 @@
+════════════════════════════════════════════════════════════════
+  CONTENU À COPIER DANS LE FICHIER .env
+════════════════════════════════════════════════════════════════
+
+📋 INSTRUCTIONS :
+1. Créez un fichier nommé ".env" dans le dossier backend/
+2. Copiez TOUT le contenu ci-dessous dans ce fichier
+3. Décommentez LA LIGNE DATABASE_URL qui correspond à votre config
+4. Sauvegardez le fichier
+
+════════════════════════════════════════════════════════════════
+  DÉBUT DU CONTENU À COPIER
+════════════════════════════════════════════════════════════════
+
+# ============================================
+# BASE DE DONNÉES MYSQL
+# ============================================
+# DÉCOMMENTEZ LA LIGNE qui correspond à votre installation :
+
+# Pour XAMPP (sans mot de passe) - DÉCOMMENTEZ CETTE LIGNE :
+DATABASE_URL="mysql://root:@localhost:3306/gta_db"
+
+# Pour WAMP (sans mot de passe) - OU DÉCOMMENTEZ CETTE LIGNE :
+# DATABASE_URL="mysql://root:@localhost:3306/gta_db"
+
+# Pour MySQL avec mot de passe - OU DÉCOMMENTEZ ET MODIFIEZ :
+# DATABASE_URL="mysql://root:VOTRE_MOT_DE_PASSE@localhost:3306/gta_db"
+
+# ============================================
+# SÉCURITÉ JWT
+# ============================================
+JWT_SECRET="secret_jwt_dev_2025_gta_change_in_production"
+JWT_EXPIRES_IN="7d"
+
+# ============================================
+# CONFIGURATION SERVEUR
+# ============================================
+PORT=8008
+NODE_ENV="development"
+
+# ============================================
+# CORS
+# ============================================
+CORS_ORIGIN="http://localhost:3000"
+
+════════════════════════════════════════════════════════════════
+  FIN DU CONTENU À COPIER
+════════════════════════════════════════════════════════════════
+
+
+📝 EXEMPLES DE CONFIGURATION :
+
+┌──────────────────────────────────────────────────────────────┐
+│  EXEMPLE 1 : XAMPP/WAMP (recommandé pour débuter)           │
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│  DATABASE_URL="mysql://root:@localhost:3306/gta_db"         │
+│  JWT_SECRET="secret_jwt_dev_2025_gta_change_in_production"  │
+│  JWT_EXPIRES_IN="7d"                                         │
+│  PORT=8008                                                   │
+│  NODE_ENV="development"                                      │
+│  CORS_ORIGIN="http://localhost:3000"                        │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────┐
+│  EXEMPLE 2 : MySQL avec mot de passe "admin123"             │
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│  DATABASE_URL="mysql://root:admin123@localhost:3306/gta_db" │
+│  JWT_SECRET="secret_jwt_dev_2025_gta_change_in_production"  │
+│  JWT_EXPIRES_IN="7d"                                         │
+│  PORT=8008                                                   │
+│  NODE_ENV="development"                                      │
+│  CORS_ORIGIN="http://localhost:3000"                        │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
+
+
+🎯 FORMAT DE DATABASE_URL :
+
+  mysql://[USER]:[PASSWORD]@[HOST]:[PORT]/[DATABASE]
+
+  USER     = root (par défaut)
+  PASSWORD = vide pour XAMPP/WAMP, ou votre mot de passe
+  HOST     = localhost
+  PORT     = 3306 (port MySQL par défaut)
+  DATABASE = gta_db
+
+
+⚠️  ATTENTION :
+- Le fichier doit s'appeler exactement ".env" (avec le point)
+- Pas d'espaces avant ou après les = 
+- Ne mettez PAS de guillemets autour des valeurs après =
+- Une seule ligne DATABASE_URL doit être active (non commentée)
+
+
+✅ APRÈS AVOIR CRÉÉ LE FICHIER .env :
+
+cd backend
+npm run prisma:generate
+npm run prisma:migrate
+npm run prisma:seed
+npm run dev
+
+
+📚 BESOIN D'AIDE ?
+→ Consultez backend/SETUP_MYSQL.md pour le guide complet
+→ Consultez backend/INSTRUCTIONS_ENV.md pour plus de détails
+
+════════════════════════════════════════════════════════════════
+

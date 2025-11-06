@@ -1,0 +1,371 @@
+@startuml Diagramme_Cas_Utilisation_GTA
+
+!define ADMIN_COLOR #FF6B6B
+!define MANAGER_COLOR #4ECDC4
+!define USER_COLOR #95E1D3
+!define SYSTEM_COLOR #F7DC6F
+
+title Diagramme de Cas d'Utilisation\nSystème de Gestion des Temps et Activités (GTA)
+
+skinparam actor {
+    BackgroundColor #E8E8E8
+    BorderColor #000000
+}
+
+skinparam usecase {
+    BackgroundColor #FFFFFF
+    BorderColor #000000
+}
+
+skinparam package {
+    BackgroundColor #F0F0F0
+    BorderColor #000000
+}
+
+' ============================================
+' ACTEURS
+' ============================================
+
+actor Admin as "Administrateur\n(ADMIN)" ADMIN_COLOR
+actor Manager as "Manager\n(MANAGER)" MANAGER_COLOR
+actor Employee as "Employé\n(USER)" USER_COLOR
+actor System as "Système" SYSTEM_COLOR
+
+' ============================================
+' PACKAGE AUTHENTIFICATION
+' ============================================
+
+package "Authentification" {
+    usecase UC1_SeConnecter as "UC1: Se connecter"
+    usecase UC2_SeDeconnecter as "UC2: Se déconnecter"
+    usecase UC3_Enregistrer as "UC3: S'enregistrer"
+    usecase UC4_RecupererMotDePasse as "UC4: Récupérer mot de passe"
+}
+
+' ============================================
+' PACKAGE GESTION EMPLOYÉS
+' ============================================
+
+package "Gestion des Employés" {
+    usecase UC5_CreerEmploye as "UC5: Créer un employé"
+    usecase UC6_ModifierEmploye as "UC6: Modifier un employé"
+    usecase UC7_SupprimerEmploye as "UC7: Supprimer un employé"
+    usecase UC8_ConsulterEmployes as "UC8: Consulter la liste des employés"
+    usecase UC9_ConsulterEmploye as "UC9: Consulter les détails d'un employé"
+    usecase UC10_ImporterEmployes as "UC10: Importer des employés (CSV)"
+}
+
+' ============================================
+' PACKAGE UNITÉS ORGANISATIONNELLES
+' ============================================
+
+package "Unités Organisationnelles" {
+    usecase UC11_CreerUnite as "UC11: Créer une unité organisationnelle"
+    usecase UC12_ModifierUnite as "UC12: Modifier une unité organisationnelle"
+    usecase UC13_SupprimerUnite as "UC13: Supprimer une unité organisationnelle"
+    usecase UC14_ConsulterArbre as "UC14: Consulter l'arbre organisationnel"
+    usecase UC15_ConsulterUnites as "UC15: Consulter la liste des unités"
+}
+
+' ============================================
+' PACKAGE CYCLES DE TRAVAIL
+' ============================================
+
+package "Cycles de Travail" {
+    usecase UC16_CreerCycle as "UC16: Créer un cycle de travail"
+    usecase UC17_ModifierCycle as "UC17: Modifier un cycle de travail"
+    usecase UC18_SupprimerCycle as "UC18: Supprimer un cycle de travail"
+    usecase UC19_ConsulterCycles as "UC19: Consulter les cycles de travail"
+    usecase UC20_AssignerCycle as "UC20: Assigner un cycle à un employé"
+}
+
+' ============================================
+' PACKAGE HORAIRES
+' ============================================
+
+package "Horaires" {
+    usecase UC21_CreerHoraire as "UC21: Créer un horaire"
+    usecase UC22_ModifierHoraire as "UC22: Modifier un horaire"
+    usecase UC23_SupprimerHoraire as "UC23: Supprimer un horaire"
+    usecase UC24_ConsulterHoraires as "UC24: Consulter les horaires"
+    usecase UC25_GererPeriodes as "UC25: Gérer les périodes d'un horaire"
+    usecase UC26_GererPlagesHoraires as "UC26: Gérer les plages horaires"
+    usecase UC27_AssignerHoraire as "UC27: Assigner un horaire à un cycle"
+}
+
+' ============================================
+' PACKAGE POINTAGES
+' ============================================
+
+package "Pointages" {
+    usecase UC28_PointerEntree as "UC28: Pointer l'entrée"
+    usecase UC29_PointerSortie as "UC29: Pointer la sortie"
+    usecase UC30_ConsulterPointages as "UC30: Consulter ses pointages"
+    usecase UC31_ConsulterTousPointages as "UC31: Consulter tous les pointages"
+    usecase UC32_CalculerHeures as "UC32: Calculer automatiquement les heures"
+    usecase UC33_ConsulterBalance as "UC33: Consulter la balance de temps"
+}
+
+' ============================================
+' PACKAGE VALIDATION
+' ============================================
+
+package "Validation" {
+    usecase UC34_ValiderPointage as "UC34: Valider un pointage"
+    usecase UC35_ValiderPeriode as "UC35: Valider une période"
+    usecase UC36_ConsulterStatsValidation as "UC36: Consulter les statistiques de validation"
+    usecase UC37_ConsulterReglesValidation as "UC37: Consulter les règles de validation"
+}
+
+' ============================================
+' PACKAGE ABSENCES
+' ============================================
+
+package "Absences" {
+    usecase UC38_DemanderAbsence as "UC38: Demander une absence"
+    usecase UC39_ModifierAbsence as "UC39: Modifier une demande d'absence"
+    usecase UC40_ConsulterAbsences as "UC40: Consulter ses absences"
+    usecase UC41_ConsulterToutesAbsences as "UC41: Consulter toutes les absences"
+    usecase UC42_ApprouverAbsence as "UC42: Approuver/Rejeter une absence"
+}
+
+' ============================================
+' PACKAGE HEURES SUPPLÉMENTAIRES
+' ============================================
+
+package "Heures Supplémentaires" {
+    usecase UC43_CreerHeuresSup as "UC43: Créer des heures supplémentaires"
+    usecase UC44_ConsulterHeuresSup as "UC44: Consulter ses heures supplémentaires"
+    usecase UC45_ConsulterToutesHeuresSup as "UC45: Consulter toutes les heures supplémentaires"
+    usecase UC46_ApprouverHeuresSup as "UC46: Approuver/Rejeter des heures supplémentaires"
+}
+
+' ============================================
+' PACKAGE HEURES SPÉCIALES
+' ============================================
+
+package "Heures Spéciales" {
+    usecase UC47_CreerHeuresSpeciales as "UC47: Créer des heures spéciales"
+    usecase UC48_ConsulterHeuresSpeciales as "UC48: Consulter ses heures spéciales"
+    usecase UC49_ConsulterToutesHeuresSpeciales as "UC49: Consulter toutes les heures spéciales"
+    usecase UC50_ApprouverHeuresSpeciales as "UC50: Approuver/Rejeter des heures spéciales"
+}
+
+' ============================================
+' PACKAGE NOTIFICATIONS
+' ============================================
+
+package "Notifications" {
+    usecase UC51_ConsulterNotifications as "UC51: Consulter ses notifications"
+    usecase UC52_MarquerLue as "UC52: Marquer une notification comme lue"
+    usecase UC53_MarquerToutesLues as "UC53: Marquer toutes les notifications comme lues"
+    usecase UC54_SupprimerNotification as "UC54: Supprimer une notification"
+    usecase UC55_EnvoyerNotification as "UC55: Envoyer une notification système"
+}
+
+' ============================================
+' PACKAGE RAPPORTS
+' ============================================
+
+package "Rapports" {
+    usecase UC56_GenererRapportGeneral as "UC56: Générer un rapport général"
+    usecase UC57_GenererRapportEmployes as "UC57: Générer un rapport par employé"
+    usecase UC58_GenererRapportMensuel as "UC58: Générer un rapport mensuel"
+    usecase UC59_GenererRapportPresence as "UC59: Générer un rapport de présence"
+    usecase UC60_GenererRapportHeuresSup as "UC60: Générer un rapport d'heures supplémentaires"
+    usecase UC61_ExporterRapport as "UC61: Exporter un rapport (CSV/Excel)"
+}
+
+' ============================================
+' PACKAGE FICHES DE PAIE
+' ============================================
+
+package "Fiches de Paie" {
+    usecase UC62_ConsulterFichePaie as "UC62: Consulter la fiche de paie"
+    usecase UC63_ImprimerFichePaie as "UC63: Imprimer la fiche de paie"
+    usecase UC64_FiltrerPeriode as "UC64: Filtrer par période"
+}
+
+' ============================================
+' PACKAGE AUDIT
+' ============================================
+
+package "Audit" {
+    usecase UC65_ConsulterLogsAudit as "UC65: Consulter les logs d'audit"
+    usecase UC66_ConsulterLogsModele as "UC66: Consulter les logs d'un modèle"
+    usecase UC67_ConsulterLogsUtilisateur as "UC67: Consulter les logs d'un utilisateur"
+}
+
+' ============================================
+' PACKAGE DASHBOARD
+' ============================================
+
+package "Dashboard" {
+    usecase UC68_ConsulterDashboard as "UC68: Consulter le tableau de bord"
+    usecase UC69_ConsulterStatistiques as "UC69: Consulter les statistiques"
+}
+
+' ============================================
+' RELATIONS ADMIN
+' ============================================
+
+Admin --> UC1_SeConnecter
+Admin --> UC2_SeDeconnecter
+Admin --> UC3_Enregistrer
+Admin --> UC5_CreerEmploye
+Admin --> UC6_ModifierEmploye
+Admin --> UC7_SupprimerEmploye
+Admin --> UC8_ConsulterEmployes
+Admin --> UC9_ConsulterEmploye
+Admin --> UC10_ImporterEmployes
+Admin --> UC11_CreerUnite
+Admin --> UC12_ModifierUnite
+Admin --> UC13_SupprimerUnite
+Admin --> UC14_ConsulterArbre
+Admin --> UC15_ConsulterUnites
+Admin --> UC16_CreerCycle
+Admin --> UC17_ModifierCycle
+Admin --> UC18_SupprimerCycle
+Admin --> UC19_ConsulterCycles
+Admin --> UC20_AssignerCycle
+Admin --> UC21_CreerHoraire
+Admin --> UC22_ModifierHoraire
+Admin --> UC23_SupprimerHoraire
+Admin --> UC24_ConsulterHoraires
+Admin --> UC25_GererPeriodes
+Admin --> UC26_GererPlagesHoraires
+Admin --> UC27_AssignerHoraire
+Admin --> UC31_ConsulterTousPointages
+Admin --> UC34_ValiderPointage
+Admin --> UC35_ValiderPeriode
+Admin --> UC36_ConsulterStatsValidation
+Admin --> UC37_ConsulterReglesValidation
+Admin --> UC41_ConsulterToutesAbsences
+Admin --> UC42_ApprouverAbsence
+Admin --> UC43_CreerHeuresSup
+Admin --> UC45_ConsulterToutesHeuresSup
+Admin --> UC46_ApprouverHeuresSup
+Admin --> UC47_CreerHeuresSpeciales
+Admin --> UC49_ConsulterToutesHeuresSpeciales
+Admin --> UC50_ApprouverHeuresSpeciales
+Admin --> UC51_ConsulterNotifications
+Admin --> UC55_EnvoyerNotification
+Admin --> UC56_GenererRapportGeneral
+Admin --> UC57_GenererRapportEmployes
+Admin --> UC58_GenererRapportMensuel
+Admin --> UC59_GenererRapportPresence
+Admin --> UC60_GenererRapportHeuresSup
+Admin --> UC61_ExporterRapport
+Admin --> UC62_ConsulterFichePaie
+Admin --> UC63_ImprimerFichePaie
+Admin --> UC64_FiltrerPeriode
+Admin --> UC65_ConsulterLogsAudit
+Admin --> UC66_ConsulterLogsModele
+Admin --> UC67_ConsulterLogsUtilisateur
+Admin --> UC68_ConsulterDashboard
+Admin --> UC69_ConsulterStatistiques
+
+' ============================================
+' RELATIONS MANAGER
+' ============================================
+
+Manager --> UC1_SeConnecter
+Manager --> UC2_SeDeconnecter
+Manager --> UC6_ModifierEmploye
+Manager --> UC8_ConsulterEmployes
+Manager --> UC9_ConsulterEmploye
+Manager --> UC15_ConsulterUnites
+Manager --> UC19_ConsulterCycles
+Manager --> UC24_ConsulterHoraires
+Manager --> UC31_ConsulterTousPointages
+Manager --> UC34_ValiderPointage
+Manager --> UC35_ValiderPeriode
+Manager --> UC36_ConsulterStatsValidation
+Manager --> UC37_ConsulterReglesValidation
+Manager --> UC41_ConsulterToutesAbsences
+Manager --> UC42_ApprouverAbsence
+Manager --> UC43_CreerHeuresSup
+Manager --> UC45_ConsulterToutesHeuresSup
+Manager --> UC46_ApprouverHeuresSup
+Manager --> UC47_CreerHeuresSpeciales
+Manager --> UC49_ConsulterToutesHeuresSpeciales
+Manager --> UC50_ApprouverHeuresSpeciales
+Manager --> UC51_ConsulterNotifications
+Manager --> UC56_GenererRapportGeneral
+Manager --> UC57_GenererRapportEmployes
+Manager --> UC58_GenererRapportMensuel
+Manager --> UC59_GenererRapportPresence
+Manager --> UC60_GenererRapportHeuresSup
+Manager --> UC61_ExporterRapport
+Manager --> UC62_ConsulterFichePaie
+Manager --> UC63_ImprimerFichePaie
+Manager --> UC68_ConsulterDashboard
+Manager --> UC69_ConsulterStatistiques
+
+' ============================================
+' RELATIONS EMPLOYEE
+' ============================================
+
+Employee --> UC1_SeConnecter
+Employee --> UC2_SeDeconnecter
+Employee --> UC28_PointerEntree
+Employee --> UC29_PointerSortie
+Employee --> UC30_ConsulterPointages
+Employee --> UC33_ConsulterBalance
+Employee --> UC38_DemanderAbsence
+Employee --> UC39_ModifierAbsence
+Employee --> UC40_ConsulterAbsences
+Employee --> UC44_ConsulterHeuresSup
+Employee --> UC48_ConsulterHeuresSpeciales
+Employee --> UC51_ConsulterNotifications
+Employee --> UC52_MarquerLue
+Employee --> UC53_MarquerToutesLues
+Employee --> UC54_SupprimerNotification
+Employee --> UC62_ConsulterFichePaie
+Employee --> UC63_ImprimerFichePaie
+Employee --> UC64_FiltrerPeriode
+Employee --> UC68_ConsulterDashboard
+
+' ============================================
+' RELATIONS SYSTÈME (AUTOMATIQUES)
+' ============================================
+
+System --> UC32_CalculerHeures
+System --> UC51_ConsulterNotifications
+System --> UC55_EnvoyerNotification
+
+UC28_PointerEntree ..> UC32_CalculerHeures : <<include>>
+UC29_PointerSortie ..> UC32_CalculerHeures : <<include>>
+UC32_CalculerHeures ..> UC43_CreerHeuresSup : <<include>>
+UC32_CalculerHeures ..> UC47_CreerHeuresSpeciales : <<include>>
+
+UC42_ApprouverAbsence ..> UC55_EnvoyerNotification : <<include>>
+UC46_ApprouverHeuresSup ..> UC55_EnvoyerNotification : <<include>>
+UC50_ApprouverHeuresSpeciales ..> UC55_EnvoyerNotification : <<include>>
+
+UC34_ValiderPointage ..> UC55_EnvoyerNotification : <<include>>
+
+UC5_CreerEmploye ..> UC65_ConsulterLogsAudit : <<extend>>
+UC6_ModifierEmploye ..> UC65_ConsulterLogsAudit : <<extend>>
+UC7_SupprimerEmploye ..> UC65_ConsulterLogsAudit : <<extend>>
+UC11_CreerUnite ..> UC65_ConsulterLogsAudit : <<extend>>
+UC42_ApprouverAbsence ..> UC65_ConsulterLogsAudit : <<extend>>
+UC46_ApprouverHeuresSup ..> UC65_ConsulterLogsAudit : <<extend>>
+
+UC62_ConsulterFichePaie ..> UC64_FiltrerPeriode : <<include>>
+UC63_ImprimerFichePaie ..> UC62_ConsulterFichePaie : <<include>>
+
+note right of UC32_CalculerHeures
+  Le système calcule automatiquement
+  les heures supplémentaires et spéciales
+  lors du pointage de sortie
+end note
+
+note right of UC55_EnvoyerNotification
+  Le système envoie automatiquement
+  des notifications pour les événements
+  importants (approbations, validations, etc.)
+end note
+
+@enduml
+

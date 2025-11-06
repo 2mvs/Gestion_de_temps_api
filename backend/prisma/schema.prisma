@@ -1,0 +1,422 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// MODÈLES D'AUTHENTIFICATION
+// ============================================
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String @db.VarChar(255)
+  role      UserRole @default(USER)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  employee         Employee?
+  auditLogs        AuditLog[]
+  notifications    Notification[]
+  approvedAbsences Absence[]      @relation("ApprovedBy")
+
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  USER
+}
+
+// ============================================
+// MODÈLES EMPLOYÉS ET ORGANISATION
+// ============================================
+
+model Employee {
+  id             Int       @id @default(autoincrement())
+  employeeNumber String    @unique
+  firstName      String
+  lastName       String
+  email          String?
+  phone          String?
+  gender         Gender    @default(UNKNOWN)
+  hireDate       DateTime
+  contractType   ContractType @default(FULL_TIME)
+  status         EmployeeStatus @default(ACTIVE)
+  
+  // Relations
+  userId               Int?                  @unique
+  user                 User?                 @relation(fields: [userId], references: [id])
+  organizationalUnitId Int?
+  organizationalUnit   OrganizationalUnit?   @relation(fields: [organizationalUnitId], references: [id])
+  workCycleId          Int?
+  workCycle            WorkCycle?            @relation(fields: [workCycleId], references: [id])
+
+  // Relations inversées
+  timeEntries    TimeEntry[]
+  absences       Absence[]
+  overtimes      Overtime[]
+  specialHours   SpecialHour[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  @@map("employees")
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  UNKNOWN
+}
+
+enum ContractType {
+  FULL_TIME
+  PART_TIME
+  INTERIM
+  CONTRACT
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  TERMINATED
+}
+
+model OrganizationalUnit {
+  id           Int     @id @default(autoincrement())
+  code         String  @unique
+  name         String
+  description  String? @db.Text
+  level        Int     @default(0)
+  
+  // Hiérarchie
+  parentId     Int?
+  parent       OrganizationalUnit?  @relation("UnitHierarchy", fields: [parentId], references: [id])
+  children     OrganizationalUnit[] @relation("UnitHierarchy")
+
+  // Relations
+  employees    Employee[]
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  deletedAt    DateTime?
+
+  @@map("organizational_units")
+}
+
+// ============================================
+// MODÈLES CYCLES DE TRAVAIL ET HORAIRES
+// ============================================
+
+model WorkCycle {
+  id                Int        @id @default(autoincrement())
+  name              String
+  abbreviation      String?
+  description       String?    @db.Text
+  cycleType         CycleType  @default(WEEKLY)
+  cycleDays         Int        @default(7)
+  weeklyHours       Float      @default(40)
+  overtimeThreshold Float?
+  
+  // Relations
+  employees         Employee[]
+  schedules         WorkCycleSchedule[]  // Relation many-to-many
+  
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  deletedAt         DateTime?
+
+  @@map("work_cycles")
+}
+
+enum CycleType {
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+  CUSTOM
+}
+
+model Schedule {
+  id            Int        @id @default(autoincrement())
+  label         String
+  abbreviation  String?
+  scheduleType  ScheduleType @default(STANDARD)
+  dayOfWeek     Int?       // 0=Dimanche, 1=Lundi, ..., 6=Samedi
+  startTime     String?    // Format "HH:MM"
+  endTime       String?    // Format "HH:MM"
+  breakDuration Int?       // en minutes
+  totalHours    Float?
+  
+  // Relations
+  workCycles    WorkCycleSchedule[]  // Relation many-to-many avec WorkCycle
+  periods       Period[]              // Périodes de l'horaire
+  
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  deletedAt     DateTime?
+
+  @@map("schedules")
+}
+
+// Table de liaison many-to-many entre WorkCycle et Schedule
+model WorkCycleSchedule {
+  id           Int        @id @default(autoincrement())
+  workCycleId  Int
+  scheduleId   Int
+  dayOfWeek    Int?       // Jour de la semaine pour ce schedule dans le cycle
+  isDefault    Boolean    @default(false)
+  
+  workCycle    WorkCycle  @relation(fields: [workCycleId], references: [id], onDelete: Cascade)
+  schedule     Schedule   @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  
+  @@unique([workCycleId, scheduleId, dayOfWeek])
+  @@map("work_cycle_schedules")
+}
+
+// Périodes dans un horaire (ex: matin, après-midi)
+model Period {
+  id          Int      @id @default(autoincrement())
+  scheduleId  Int
+  schedule    Schedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  
+  name        String   // Ex: "Matin", "Après-midi", "Nuit"
+  startTime   String   // Format "HH:MM"
+  endTime     String   // Format "HH:MM"
+  periodType  PeriodType @default(REGULAR)
+  
+  // Relations
+  timeRanges  TimeRange[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("periods")
+}
+
+enum PeriodType {
+  REGULAR       // Période normale
+  BREAK         // Pause
+  OVERTIME      // Heures supplémentaires
+  SPECIAL       // Heures spéciales
+}
+
+// Plages horaires dans une période (pour calcul auto heures sup/spéciales)
+model TimeRange {
+  id         Int       @id @default(autoincrement())
+  periodId   Int
+  period     Period    @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  
+  name       String    // Ex: "Heures normales", "Heures de nuit"
+  startTime  String    // Format "HH:MM"
+  endTime    String    // Format "HH:MM"
+  rangeType  TimeRangeType @default(NORMAL)
+  multiplier Float     @default(1.0)  // 1.0 = normal, 1.25 = 25% sup, 1.5 = 50% sup
+  
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  
+  @@map("time_ranges")
+}
+
+enum TimeRangeType {
+  NORMAL          // Heures normales
+  OVERTIME        // Heures supplémentaires
+  NIGHT_SHIFT     // Heures de nuit
+  SUNDAY          // Dimanche
+  HOLIDAY         // Jour férié
+  SPECIAL         // Autre majoration
+}
+
+enum ScheduleType {
+  STANDARD
+  NIGHT_SHIFT
+  FLEXIBLE
+  CUSTOM
+}
+
+// ============================================
+// MODÈLES POINTAGES ET TEMPS
+// ============================================
+
+model TimeEntry {
+  id                Int            @id @default(autoincrement())
+  date              DateTime
+  clockIn           DateTime?
+  clockOut          DateTime?
+  totalHours        Float?
+  status            TimeEntryStatus @default(PENDING)
+  
+  // Validation
+  isValidated       Boolean        @default(false)
+  validatedAt       DateTime?
+  validationErrors  String?  @db.Text      // JSON des erreurs de validation
+  
+  // Relations
+  employeeId        Int
+  employee          Employee       @relation(fields: [employeeId], references: [id])
+  
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@unique([employeeId, date])
+  @@map("time_entries")
+}
+
+enum TimeEntryStatus {
+  PENDING
+  COMPLETED
+  INCOMPLETE
+  ABSENT
+}
+
+// ============================================
+// MODÈLES ABSENCES ET DEMANDES
+// ============================================
+
+model Absence {
+  id          Int            @id @default(autoincrement())
+  absenceType AbsenceType    @default(VACATION)
+  startDate   DateTime
+  endDate     DateTime
+  days        Float
+  reason      String?  @db.Text
+  status      ApprovalStatus @default(PENDING)
+  
+  // Relations
+  employeeId  Int
+  employee    Employee       @relation(fields: [employeeId], references: [id])
+  approvedBy  Int?
+  approver    User?          @relation("ApprovedBy", fields: [approvedBy], references: [id])
+  approvedAt  DateTime?
+  
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@map("absences")
+}
+
+enum AbsenceType {
+  VACATION
+  SICK_LEAVE
+  PERSONAL
+  MATERNITY
+  PATERNITY
+  UNPAID_LEAVE
+  OTHER
+}
+
+model Overtime {
+  id          Int            @id @default(autoincrement())
+  date        DateTime
+  hours       Float
+  reason      String?  @db.Text
+  status      ApprovalStatus @default(PENDING)
+  
+  // Relations
+  employeeId  Int
+  employee    Employee       @relation(fields: [employeeId], references: [id])
+  approvedAt  DateTime?
+  
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@map("overtimes")
+}
+
+model SpecialHour {
+  id          Int            @id @default(autoincrement())
+  date        DateTime
+  hours       Float
+  hourType    SpecialHourType @default(HOLIDAY)
+  reason      String?  @db.Text
+  status      ApprovalStatus @default(PENDING)
+  
+  // Relations
+  employeeId  Int
+  employee    Employee       @relation(fields: [employeeId], references: [id])
+  approvedAt  DateTime?
+  
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@map("special_hours")
+}
+
+enum SpecialHourType {
+  HOLIDAY
+  NIGHT_SHIFT
+  WEEKEND
+  ON_CALL
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// ============================================
+// MODÈLES NOTIFICATIONS ET AUDIT
+// ============================================
+
+model Notification {
+  id        Int                @id @default(autoincrement())
+  type      NotificationType   @default(INFO)
+  title     String
+  message   String  @db.Text
+  isRead    Boolean            @default(false)
+  
+  // Relations
+  userId    Int
+  user      User               @relation(fields: [userId], references: [id])
+  
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  @@map("notifications")
+}
+
+enum NotificationType {
+  INFO
+  WARNING
+  ERROR
+  SUCCESS
+  APPROVAL_REQUEST
+  SYSTEM_ALERT
+}
+
+model AuditLog {
+  id          Int      @id @default(autoincrement())
+  action      String
+  modelType   String
+  modelId     Int?
+  oldValue    String?  @db.Text  // JSON
+  newValue    String?  @db.Text  // JSON
+  ipAddress   String?
+  userAgent   String?  @db.Text
+  
+  // Relations
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id])
+  
+  createdAt   DateTime @default(now())
+
+  @@map("audit_logs")
+}
+
