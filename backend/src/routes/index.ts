@@ -3,8 +3,6 @@ import authRoutes from './auth.routes';
 import employeeRoutes from './employee.routes';
 import workCycleRoutes from './workCycle.routes';
 import scheduleRoutes from './schedule.routes';
-import periodRoutes from './period.routes';
-import timeRangeRoutes from './timeRange.routes';
 import timeEntryRoutes from './timeEntry.routes';
 import absenceRoutes from './absence.routes';
 import overtimeRoutes from './overtime.routes';
@@ -25,8 +23,6 @@ router.use('/employees', employeeRoutes);
 // Routes des cycles de travail et horaires
 router.use('/work-cycles', workCycleRoutes);
 router.use('/schedules', scheduleRoutes);
-router.use('/periods', periodRoutes);
-router.use('/time-ranges', timeRangeRoutes);
 
 // Routes des pointages
 router.use('/time-entries', timeEntryRoutes);

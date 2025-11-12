@@ -3,13 +3,15 @@ import {
   getTimeEntriesByEmployee,
   clockIn,
   clockOut,
+  updateTimeEntry,
+  deleteTimeEntry,
   getBalance,
   validateTimeEntry,
   validatePeriod,
   getValidationStats,
   getValidationRules,
 } from '../controllers/timeEntry.controller';
-import { authenticate } from '../middlewares/auth.middleware';
+import { authenticate, authorize } from '../middlewares/auth.middleware';
 
 const router = Router();
 
@@ -18,6 +20,8 @@ router.use(authenticate);
 router.get('/employee/:employeeId', getTimeEntriesByEmployee);
 router.post('/:employeeId/clock-in', clockIn);
 router.post('/:employeeId/clock-out', clockOut);
+router.put('/:id', authorize('ADMIN', 'MANAGER'), updateTimeEntry);
+router.delete('/:id', authorize('ADMIN'), deleteTimeEntry);
 router.get('/employee/:employeeId/balance', getBalance);
 router.post('/:id/validate', validateTimeEntry);
 router.post('/employee/:employeeId/validate-period', validatePeriod);

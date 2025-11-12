@@ -19,10 +19,10 @@ CREATE TABLE `employees` (
     `lastName` VARCHAR(191) NOT NULL,
     `email` VARCHAR(191) NULL,
     `phone` VARCHAR(191) NULL,
-    `gender` ENUM('MALE', 'FEMALE', 'UNKNOWN') NOT NULL DEFAULT 'UNKNOWN',
+    `gender` ENUM('Homme', 'Femme', 'Aucun') NOT NULL DEFAULT 'Aucun',
     `hireDate` DATETIME(3) NOT NULL,
-    `contractType` ENUM('FULL_TIME', 'PART_TIME', 'INTERIM', 'CONTRACT') NOT NULL DEFAULT 'FULL_TIME',
-    `status` ENUM('ACTIVE', 'INACTIVE', 'SUSPENDED', 'TERMINATED') NOT NULL DEFAULT 'ACTIVE',
+    `contractType` ENUM('TEMPS_PLEIN', 'TEMPS_PARTIEL', 'INTERIMAIRE', 'CONTRAT') NOT NULL DEFAULT 'TEMPS_PLEIN',
+    `status` ENUM('ACTIF', 'INACTIF', 'SUSPENDU', 'FIN_CONTRAT') NOT NULL DEFAULT 'ACTIF',
     `userId` INTEGER NULL,
     `organizationalUnitId` INTEGER NULL,
     `workCycleId` INTEGER NULL,
@@ -57,7 +57,7 @@ CREATE TABLE `work_cycles` (
     `name` VARCHAR(191) NOT NULL,
     `abbreviation` VARCHAR(191) NULL,
     `description` TEXT NULL,
-    `cycleType` ENUM('WEEKLY', 'BIWEEKLY', 'MONTHLY', 'CUSTOM') NOT NULL DEFAULT 'WEEKLY',
+    `cycleType` ENUM('JOURNALIER', 'HEBDOMADAIRE', 'MENSUEL') NOT NULL DEFAULT 'HEBDOMADAIRE',
     `cycleDays` INTEGER NOT NULL DEFAULT 7,
     `weeklyHours` DOUBLE NOT NULL DEFAULT 40,
     `overtimeThreshold` DOUBLE NULL,
@@ -73,16 +73,58 @@ CREATE TABLE `schedules` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,
     `label` VARCHAR(191) NOT NULL,
     `abbreviation` VARCHAR(191) NULL,
-    `scheduleType` ENUM('STANDARD', 'NIGHT_SHIFT', 'FLEXIBLE', 'CUSTOM') NOT NULL DEFAULT 'STANDARD',
+    `scheduleType` ENUM('STANDARD', 'HEURES_DE_NUIT', 'FLEXIBLE', 'PERSONNALISE') NOT NULL DEFAULT 'STANDARD',
     `dayOfWeek` INTEGER NULL,
-    `startTime` DATETIME(3) NULL,
-    `endTime` DATETIME(3) NULL,
+    `startTime` VARCHAR(191) NULL,
+    `endTime` VARCHAR(191) NULL,
     `breakDuration` INTEGER NULL,
     `totalHours` DOUBLE NULL,
-    `workCycleId` INTEGER NULL,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updatedAt` DATETIME(3) NOT NULL,
     `deletedAt` DATETIME(3) NULL,
+
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `work_cycle_schedules` (
+    `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `workCycleId` INTEGER NOT NULL,
+    `scheduleId` INTEGER NOT NULL,
+    `dayOfWeek` INTEGER NULL,
+    `isDefault` BOOLEAN NOT NULL DEFAULT false,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
+
+    UNIQUE INDEX `work_cycle_schedules_workCycleId_scheduleId_dayOfWeek_key`(`workCycleId`, `scheduleId`, `dayOfWeek`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `periods` (
+    `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `scheduleId` INTEGER NOT NULL,
+    `name` VARCHAR(191) NOT NULL,
+    `startTime` VARCHAR(191) NOT NULL,
+    `endTime` VARCHAR(191) NOT NULL,
+    `periodType` ENUM('PERIODE_NORMALE', 'PAUSE', 'HEURES_SUPPLEMENTAIRES', 'HEURES_SPECIALES') NOT NULL DEFAULT 'PERIODE_NORMALE',
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
+
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `time_ranges` (
+    `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `periodId` INTEGER NOT NULL,
+    `name` VARCHAR(191) NOT NULL,
+    `startTime` VARCHAR(191) NOT NULL,
+    `endTime` VARCHAR(191) NOT NULL,
+    `rangeType` ENUM('HEURES_NORMALES', 'HEURES_SUPPLEMENTAIRES', 'HEURES_DE_NUIT', 'DIMANCHE', 'JOUR_FERIE', 'AUTRE_MAJORATION') NOT NULL DEFAULT 'HEURES_NORMALES',
+    `multiplier` DOUBLE NOT NULL DEFAULT 1.0,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
 
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -94,7 +136,7 @@ CREATE TABLE `time_entries` (
     `clockIn` DATETIME(3) NULL,
     `clockOut` DATETIME(3) NULL,
     `totalHours` DOUBLE NULL,
-    `status` ENUM('PENDING', 'COMPLETED', 'INCOMPLETE', 'ABSENT') NOT NULL DEFAULT 'PENDING',
+    `status` ENUM('EN_ATTENTE', 'TERMINE', 'INCOMPLET', 'ABSENT') NOT NULL DEFAULT 'EN_ATTENTE',
     `isValidated` BOOLEAN NOT NULL DEFAULT false,
     `validatedAt` DATETIME(3) NULL,
     `validationErrors` TEXT NULL,
@@ -109,12 +151,12 @@ CREATE TABLE `time_entries` (
 -- CreateTable
 CREATE TABLE `absences` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,
-    `absenceType` ENUM('VACATION', 'SICK_LEAVE', 'PERSONAL', 'MATERNITY', 'PATERNITY', 'UNPAID_LEAVE', 'OTHER') NOT NULL DEFAULT 'VACATION',
+    `absenceType` ENUM('CONGE_VACATION', 'CONGE_MALADIE', 'CONGE_PERSONNEL', 'CONGE_MATERNITE', 'CONGE_PATERNITE', 'CONGE_SANS_SOLDE', 'AUTRE') NOT NULL DEFAULT 'CONGE_VACATION',
     `startDate` DATETIME(3) NOT NULL,
     `endDate` DATETIME(3) NOT NULL,
     `days` DOUBLE NOT NULL,
     `reason` TEXT NULL,
-    `status` ENUM('PENDING', 'APPROVED', 'REJECTED') NOT NULL DEFAULT 'PENDING',
+    `status` ENUM('EN_ATTENTE', 'APPROUVE', 'REJETE') NOT NULL DEFAULT 'EN_ATTENTE',
     `employeeId` INTEGER NOT NULL,
     `approvedBy` INTEGER NULL,
     `approvedAt` DATETIME(3) NULL,
@@ -130,7 +172,7 @@ CREATE TABLE `overtimes` (
     `date` DATETIME(3) NOT NULL,
     `hours` DOUBLE NOT NULL,
     `reason` TEXT NULL,
-    `status` ENUM('PENDING', 'APPROVED', 'REJECTED') NOT NULL DEFAULT 'PENDING',
+    `status` ENUM('EN_ATTENTE', 'APPROUVE', 'REJETE') NOT NULL DEFAULT 'EN_ATTENTE',
     `employeeId` INTEGER NOT NULL,
     `approvedAt` DATETIME(3) NULL,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
@@ -144,9 +186,9 @@ CREATE TABLE `special_hours` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,
     `date` DATETIME(3) NOT NULL,
     `hours` DOUBLE NOT NULL,
-    `hourType` ENUM('HOLIDAY', 'NIGHT_SHIFT', 'WEEKEND', 'ON_CALL') NOT NULL DEFAULT 'HOLIDAY',
+    `hourType` ENUM('JOUR_FERIE', 'HEURES_DE_NUIT', 'WEEK_END', 'APPEL_DE_SERVICE') NOT NULL DEFAULT 'JOUR_FERIE',
     `reason` TEXT NULL,
-    `status` ENUM('PENDING', 'APPROVED', 'REJECTED') NOT NULL DEFAULT 'PENDING',
+    `status` ENUM('EN_ATTENTE', 'APPROUVE', 'REJETE') NOT NULL DEFAULT 'EN_ATTENTE',
     `employeeId` INTEGER NOT NULL,
     `approvedAt` DATETIME(3) NULL,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
@@ -198,7 +240,16 @@ ALTER TABLE `employees` ADD CONSTRAINT `employees_workCycleId_fkey` FOREIGN KEY 
 ALTER TABLE `organizational_units` ADD CONSTRAINT `organizational_units_parentId_fkey` FOREIGN KEY (`parentId`) REFERENCES `organizational_units`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `schedules` ADD CONSTRAINT `schedules_workCycleId_fkey` FOREIGN KEY (`workCycleId`) REFERENCES `work_cycles`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE `work_cycle_schedules` ADD CONSTRAINT `work_cycle_schedules_workCycleId_fkey` FOREIGN KEY (`workCycleId`) REFERENCES `work_cycles`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `work_cycle_schedules` ADD CONSTRAINT `work_cycle_schedules_scheduleId_fkey` FOREIGN KEY (`scheduleId`) REFERENCES `schedules`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `periods` ADD CONSTRAINT `periods_scheduleId_fkey` FOREIGN KEY (`scheduleId`) REFERENCES `schedules`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `time_ranges` ADD CONSTRAINT `time_ranges_periodId_fkey` FOREIGN KEY (`periodId`) REFERENCES `periods`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `time_entries` ADD CONSTRAINT `time_entries_employeeId_fkey` FOREIGN KEY (`employeeId`) REFERENCES `employees`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;

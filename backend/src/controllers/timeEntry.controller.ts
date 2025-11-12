@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import prisma from '../config/database';
 import { CustomError } from '../middlewares/error.middleware';
 import { createAuditLog } from '../utils/audit';
+import { managerHasAccessToEmployee } from '../utils/access';
 import {
   calculateHoursWorked,
   autoCreateOvertimeAndSpecialHours,
@@ -12,8 +13,20 @@ export const getTimeEntriesByEmployee = async (req: Request, res: Response): Pro
     const { employeeId } = req.params;
     const { startDate, endDate, includeCalculations } = req.query;
 
+    const parsedEmployeeId = parseInt(employeeId, 10);
+    if (Number.isNaN(parsedEmployeeId)) {
+      throw new CustomError('Identifiant employé invalide', 400);
+    }
+
+    if (req.user?.role === 'MANAGER') {
+      const hasAccess = await managerHasAccessToEmployee(req.user.userId, parsedEmployeeId);
+      if (!hasAccess) {
+        throw new CustomError('Accès refusé', 403);
+      }
+    }
+
     const where: any = {
-      employeeId: parseInt(employeeId),
+      employeeId: parsedEmployeeId,
     };
 
     if (startDate && endDate) {
@@ -51,6 +64,18 @@ export const clockIn = async (req: Request, res: Response): Promise<void> => {
     const { employeeId } = req.params;
     const { clockInTime } = req.body;
 
+    const parsedEmployeeId = parseInt(employeeId, 10);
+    if (Number.isNaN(parsedEmployeeId)) {
+      throw new CustomError('Identifiant employé invalide', 400);
+    }
+
+    if (req.user?.role === 'MANAGER') {
+      const hasAccess = await managerHasAccessToEmployee(req.user.userId, parsedEmployeeId);
+      if (!hasAccess) {
+        throw new CustomError('Accès refusé', 403);
+      }
+    }
+
     const now = clockInTime ? new Date(clockInTime) : new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     
@@ -72,7 +97,7 @@ export const clockIn = async (req: Request, res: Response): Promise<void> => {
     const existingEntry = await prisma.timeEntry.findUnique({
       where: {
         employeeId_date: {
-          employeeId: parseInt(employeeId),
+          employeeId: parsedEmployeeId,
           date: today,
         },
       },
@@ -89,15 +114,19 @@ export const clockIn = async (req: Request, res: Response): Promise<void> => {
         where: { id: existingEntry.id },
         data: {
           clockIn: now,
+          isValidated: false,
+          validatedAt: null,
         },
       });
     } else {
       // Créer une nouvelle entrée
       timeEntry = await prisma.timeEntry.create({
         data: {
-          employeeId: parseInt(employeeId),
+          employeeId: parsedEmployeeId,
           date: today,
           clockIn: now,
+          isValidated: false,
+          validatedAt: null,
           status: 'PENDING',
         },
       });
@@ -127,6 +156,18 @@ export const clockOut = async (req: Request, res: Response): Promise<void> => {
     const { employeeId } = req.params;
     const { clockOutTime } = req.body;
 
+    const parsedEmployeeId = parseInt(employeeId, 10);
+    if (Number.isNaN(parsedEmployeeId)) {
+      throw new CustomError('Identifiant employé invalide', 400);
+    }
+
+    if (req.user?.role === 'MANAGER') {
+      const hasAccess = await managerHasAccessToEmployee(req.user.userId, parsedEmployeeId);
+      if (!hasAccess) {
+        throw new CustomError('Accès refusé', 403);
+      }
+    }
+
     const now = clockOutTime ? new Date(clockOutTime) : new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     
@@ -141,7 +182,7 @@ export const clockOut = async (req: Request, res: Response): Promise<void> => {
     const timeEntry = await prisma.timeEntry.findUnique({
       where: {
         employeeId_date: {
-          employeeId: parseInt(employeeId),
+          employeeId: parsedEmployeeId,
           date: today,
         },
       },
@@ -170,6 +211,8 @@ export const clockOut = async (req: Request, res: Response): Promise<void> => {
         clockOut: now,
         totalHours: Math.round(totalHours * 100) / 100,
         status: 'COMPLETED',
+        isValidated: false,
+        validatedAt: null,
       },
     });
 
@@ -185,7 +228,7 @@ export const clockOut = async (req: Request, res: Response): Promise<void> => {
       // Créer automatiquement les enregistrements d'heures sup/spéciales
       await autoCreateOvertimeAndSpecialHours(
         {
-          employeeId: parseInt(employeeId),
+          employeeId: parsedEmployeeId,
           clockInTime: timeEntry.clockIn,
           clockOutTime: now,
           date: today,
@@ -232,10 +275,164 @@ export const clockOut = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
+export const updateTimeEntry = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { clockIn, clockOut, totalHours, status } = req.body;
+
+    const timeEntry = await prisma.timeEntry.findUnique({
+      where: { id: parseInt(id, 10) },
+    });
+
+    if (!timeEntry) {
+      throw new CustomError('Pointage introuvable', 404);
+    }
+
+    if (req.user?.role === 'MANAGER') {
+      const hasAccess = await managerHasAccessToEmployee(req.user.userId, timeEntry.employeeId);
+      if (!hasAccess) {
+        throw new CustomError('Accès refusé', 403);
+      }
+    }
+
+    if (req.user?.role === 'MANAGER') {
+      const hasAccess = await managerHasAccessToEmployee(req.user.userId, timeEntry.employeeId);
+      if (!hasAccess) {
+        throw new CustomError('Accès refusé', 403);
+      }
+    }
+
+    const updates: any = {};
+
+    if (clockIn !== undefined) {
+      const parsedClockIn = clockIn ? new Date(clockIn) : null;
+      if (parsedClockIn && Number.isNaN(parsedClockIn.getTime())) {
+        throw new CustomError("Heure d'entrée invalide", 400);
+      }
+      updates.clockIn = parsedClockIn;
+    }
+
+    if (clockOut !== undefined) {
+      const parsedClockOut = clockOut ? new Date(clockOut) : null;
+      if (parsedClockOut && Number.isNaN(parsedClockOut.getTime())) {
+        throw new CustomError("Heure de sortie invalide", 400);
+      }
+      updates.clockOut = parsedClockOut;
+    }
+
+    if (
+      updates.clockIn &&
+      updates.clockOut &&
+      updates.clockOut <= updates.clockIn
+    ) {
+      throw new CustomError("L'heure de sortie doit être après l'heure d'entrée", 400);
+    }
+
+    if (totalHours !== undefined) {
+      const parsedTotalHours = parseFloat(totalHours);
+      if (Number.isNaN(parsedTotalHours) || parsedTotalHours < 0) {
+        throw new CustomError('Total heures invalide', 400);
+      }
+      updates.totalHours = Math.round(parsedTotalHours * 100) / 100;
+    } else if (updates.clockIn && updates.clockOut) {
+      const diff =
+        (updates.clockOut.getTime() - updates.clockIn.getTime()) /
+        (1000 * 60 * 60);
+      updates.totalHours = Math.round(diff * 100) / 100;
+    }
+
+    if (status) {
+      const allowedStatuses = ['PENDING', 'COMPLETED', 'INCOMPLETE', 'ABSENT'];
+      if (!allowedStatuses.includes(status)) {
+        throw new CustomError('Statut invalide', 400);
+      }
+      updates.status = status;
+    } else if (updates.clockIn && updates.clockOut) {
+      updates.status = 'COMPLETED';
+    } else if (updates.clockIn || updates.clockOut) {
+      updates.status = 'INCOMPLETE';
+    }
+
+    updates.updatedAt = new Date();
+    updates.isValidated = false;
+    updates.validatedAt = null;
+    updates.validationErrors = null;
+
+    const updatedEntry = await prisma.timeEntry.update({
+      where: { id: timeEntry.id },
+      data: updates,
+    });
+
+    await createAuditLog({
+      userId: req.user!.userId,
+      action: 'UPDATE',
+      modelType: 'TimeEntry',
+      modelId: updatedEntry.id,
+      oldValue: timeEntry,
+      newValue: updatedEntry,
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
+
+    res.json({
+      message: 'Pointage mis à jour avec succès',
+      data: updatedEntry,
+    });
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const deleteTimeEntry = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    const timeEntry = await prisma.timeEntry.findUnique({
+      where: { id: parseInt(id, 10) },
+    });
+
+    if (!timeEntry) {
+      throw new CustomError('Pointage introuvable', 404);
+    }
+
+    await prisma.timeEntry.delete({
+      where: { id: timeEntry.id },
+    });
+
+    await createAuditLog({
+      userId: req.user!.userId,
+      action: 'DELETE',
+      modelType: 'TimeEntry',
+      modelId: timeEntry.id,
+      oldValue: timeEntry,
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
+
+    res.json({
+      message: 'Pointage supprimé avec succès',
+    });
+  } catch (error) {
+    throw error;
+  }
+};
+
 export const getBalance = async (req: Request, res: Response): Promise<void> => {
   try {
     const { employeeId } = req.params;
     const { startDate, endDate } = req.query;
+
+    const parsedEmployeeId = parseInt(employeeId, 10);
+    if (Number.isNaN(parsedEmployeeId)) {
+      throw new CustomError('Identifiant employé invalide', 400);
+    }
+
+    if (req.user?.role === 'MANAGER') {
+      const hasAccess = await managerHasAccessToEmployee(req.user.userId, parsedEmployeeId);
+      if (!hasAccess) {
+        throw new CustomError('Accès refusé', 403);
+      }
+    }
 
     if (!startDate || !endDate) {
       throw new CustomError('Les dates de début et de fin sont requises', 400);
@@ -243,7 +440,7 @@ export const getBalance = async (req: Request, res: Response): Promise<void> => 
 
     const timeEntries = await prisma.timeEntry.findMany({
       where: {
-        employeeId: parseInt(employeeId),
+        employeeId: parsedEmployeeId,
         date: {
           gte: new Date(startDate as string),
           lte: new Date(endDate as string),
@@ -257,18 +454,30 @@ export const getBalance = async (req: Request, res: Response): Promise<void> => 
 
     // Récupérer le cycle de travail de l'employé
     const employee = await prisma.employee.findUnique({
-      where: { id: parseInt(employeeId) },
+      where: { id: parsedEmployeeId },
       include: {
-        workCycle: true,
+        workCycle: {
+          include: {
+            schedule: true,
+          },
+        },
       },
     });
 
-    const expectedWeeklyHours = employee?.workCycle?.weeklyHours || 40;
-    const weeks = Math.ceil(
-      (new Date(endDate as string).getTime() - new Date(startDate as string).getTime()) /
-        (7 * 24 * 60 * 60 * 1000)
+    const schedule = employee?.workCycle?.schedule;
+    const expectedDailyHours = schedule?.theoreticalDayHours ?? 8;
+
+    const rangeStart = startDate ? new Date(startDate as string) : new Date(timeEntries[0]?.date ?? new Date());
+    const rangeEnd = endDate ? new Date(endDate as string) : new Date(timeEntries[timeEntries.length - 1]?.date ?? new Date());
+    rangeStart.setHours(0, 0, 0, 0);
+    rangeEnd.setHours(0, 0, 0, 0);
+
+    const dayCount = Math.max(
+      1,
+      Math.floor((rangeEnd.getTime() - rangeStart.getTime()) / (24 * 60 * 60 * 1000)) + 1
     );
-    const expectedHours = expectedWeeklyHours * weeks;
+
+    const expectedHours = expectedDailyHours * dayCount;
     const balance = totalHours - expectedHours;
 
     res.json({
@@ -299,6 +508,13 @@ export const validateTimeEntry = async (req: Request, res: Response): Promise<vo
 
     if (!timeEntry) {
       throw new CustomError('Pointage non trouvé', 404);
+    }
+
+    if (req.user?.role === 'MANAGER') {
+      const hasAccess = await managerHasAccessToEmployee(req.user.userId, timeEntry.employeeId);
+      if (!hasAccess) {
+        throw new CustomError('Accès refusé', 403);
+      }
     }
 
     const errors: string[] = [];
@@ -350,51 +566,161 @@ export const validatePeriod = async (req: Request, res: Response): Promise<void>
     const { employeeId } = req.params;
     const { startDate, endDate, autoCorrect } = req.body;
 
+    const parsedEmployeeId = parseInt(employeeId, 10);
+    if (Number.isNaN(parsedEmployeeId)) {
+      throw new CustomError('Identifiant employé invalide', 400);
+    }
+
+    if (req.user?.role === 'MANAGER') {
+      const hasAccess = await managerHasAccessToEmployee(req.user.userId, parsedEmployeeId);
+      if (!hasAccess) {
+        throw new CustomError('Accès refusé', 403);
+      }
+    }
+
     const timeEntries = await prisma.timeEntry.findMany({
       where: {
-        employeeId: parseInt(employeeId),
+        employeeId: parsedEmployeeId,
         date: {
           gte: new Date(startDate),
           lte: new Date(endDate),
         },
       },
+      include: {
+        employee: {
+          select: {
+            firstName: true,
+            lastName: true,
+            employeeNumber: true,
+          },
+        },
+      },
+      orderBy: {
+        date: 'asc',
+      },
     });
 
-    const results = [];
-    for (const entry of timeEntries) {
-      const errors: string[] = [];
+    const validationReports: any[] = [];
+    const issueCounts: Record<string, { count: number; ruleName: string }> = {};
+    let correctionsApplied = 0;
 
-      if (!entry.clockIn) errors.push('Pointage d\'entrée manquant');
-      if (!entry.clockOut) errors.push('Pointage de sortie manquant');
-      
+    for (const entry of timeEntries) {
+      const issues: any[] = [];
+
+      if (!entry.clockIn) {
+        issues.push({
+          isValid: false,
+          ruleId: 'CLOCK_IN_MISSING',
+          ruleName: 'Pointage d\'entrée manquant',
+          message: 'Pointage d\'entrée manquant',
+          severity: 'CRITICAL',
+          suggestion: 'Enregistrer l\'heure d\'entrée manuellement ou contacter l\'administrateur.',
+        });
+      }
+
+      if (!entry.clockOut) {
+        issues.push({
+          isValid: false,
+          ruleId: 'CLOCK_OUT_MISSING',
+          ruleName: 'Pointage de sortie manquant',
+          message: 'Pointage de sortie manquant',
+          severity: 'CRITICAL',
+          suggestion: 'Enregistrer l\'heure de sortie manuellement ou contacter l\'administrateur.',
+        });
+      }
+
       if (entry.clockIn && entry.clockOut && new Date(entry.clockOut) <= new Date(entry.clockIn)) {
-        errors.push('L\'heure de sortie doit être après l\'heure d\'entrée');
+        issues.push({
+          isValid: false,
+          ruleId: 'CLOCK_ORDER_INVALID',
+          ruleName: 'Ordre des pointages invalide',
+          message: 'L\'heure de sortie doit être après l\'heure d\'entrée',
+          severity: 'HIGH',
+          suggestion: 'Corriger les heures de pointage pour respecter l\'ordre chronologique.',
+        });
       }
 
       if (entry.totalHours && entry.totalHours > 24) {
-        errors.push('Le total d\'heures dépasse 24h');
+        issues.push({
+          isValid: false,
+          ruleId: 'TOTAL_HOURS_EXCEEDED',
+          ruleName: 'Durée anormale',
+          message: 'Le total d\'heures dépasse 24h',
+          severity: 'HIGH',
+          suggestion: 'Vérifier les heures saisies, un pointage manquant ou invalide est probable.',
+        });
       }
 
-      const isValid = errors.length === 0;
+      const issuesForStatistics = issues.length ? issues : [{
+        isValid: true,
+        ruleId: 'OK',
+        ruleName: 'Pointage valide',
+        message: 'Aucun problème détecté',
+        severity: 'LOW',
+      }];
 
-      const updated = await prisma.timeEntry.update({
+      for (const issue of issues) {
+        if (!issueCounts[issue.ruleId]) {
+          issueCounts[issue.ruleId] = { count: 0, ruleName: issue.ruleName };
+        }
+        issueCounts[issue.ruleId].count += 1;
+      }
+
+      const overallStatus = issues.length === 0 ? 'VALID' : 'INVALID';
+
+      if (autoCorrect && issues.length === 0) {
+        // aucun correctif nécessaire
+      }
+
+      await prisma.timeEntry.update({
         where: { id: entry.id },
         data: {
-          isValidated: isValid,
-          validatedAt: isValid ? new Date() : null,
-          validationErrors: errors.length > 0 ? JSON.stringify(errors) : null,
+          isValidated: issues.length === 0,
+          validatedAt: issues.length === 0 ? new Date() : null,
+          validationErrors: issues.length > 0 ? JSON.stringify(issues.map(i => i.message)) : null,
         },
       });
 
-      results.push({
-        id: updated.id,
-        date: updated.date,
-        isValid,
-        errors,
+      validationReports.push({
+        timeEntryId: entry.id,
+        employeeId: entry.employeeId,
+        employeeName: `${entry.employee?.firstName ?? ''} ${entry.employee?.lastName ?? ''}`.trim() ||
+          entry.employee?.employeeNumber ||
+          `Employé #${entry.employeeId}`,
+        date: entry.date,
+        results: issuesForStatistics,
+        overallStatus,
+        canAutoCorrect: false,
       });
     }
 
-    res.json({ data: results });
+    const totalEntries = validationReports.length;
+    const validEntries = validationReports.filter((r) => r.overallStatus === 'VALID').length;
+    const invalidEntries = validationReports.filter((r) => r.overallStatus === 'INVALID').length;
+    const warningEntries = validationReports.filter((r) => r.overallStatus === 'WARNING').length;
+
+    const mostCommonIssues = Object.entries(issueCounts)
+      .sort((a, b) => b[1].count - a[1].count)
+      .slice(0, 5)
+      .map(([ruleId, info]) => ({
+        ruleId,
+        count: info.count,
+        ruleName: info.ruleName,
+      }));
+
+    res.json({
+      data: {
+        validationReports,
+        statistics: {
+          totalEntries,
+          validEntries,
+          warningEntries,
+          invalidEntries,
+          mostCommonIssues,
+        },
+        correctionsApplied,
+      },
+    });
   } catch (error) {
     throw error;
   }
@@ -405,9 +731,21 @@ export const getValidationStats = async (req: Request, res: Response): Promise<v
     const { employeeId } = req.params;
     const { startDate, endDate } = req.query;
 
+    const parsedEmployeeId = parseInt(employeeId, 10);
+    if (Number.isNaN(parsedEmployeeId)) {
+      throw new CustomError('Identifiant employé invalide', 400);
+    }
+
+    if (req.user?.role === 'MANAGER') {
+      const hasAccess = await managerHasAccessToEmployee(req.user.userId, parsedEmployeeId);
+      if (!hasAccess) {
+        throw new CustomError('Accès refusé', 403);
+      }
+    }
+
     const timeEntries = await prisma.timeEntry.findMany({
       where: {
-        employeeId: parseInt(employeeId),
+        employeeId: parsedEmployeeId,
         date: {
           gte: new Date(startDate as string),
           lte: new Date(endDate as string),

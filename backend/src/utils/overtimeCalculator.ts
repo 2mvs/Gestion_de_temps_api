@@ -23,6 +23,7 @@ interface CalculatedHours {
     start: string;
     end: string;
     hours: number;
+    label: string;
     type: string;
     multiplier: number;
   }>;
@@ -59,30 +60,6 @@ function isHoliday(date: Date): boolean {
 }
 
 /**
- * Trouve dans quelle plage horaire se trouve un horaire donné
- */
-function findTimeRange(
-  hour: number,
-  minute: number,
-  period: any
-): { range: any; minutesInRange: number } | null {
-  const totalMinutes = hour * 60 + minute;
-
-  for (const timeRange of period.timeRanges || []) {
-    const rangeStart = timeToMinutes(timeRange.startTime);
-    const rangeEnd = timeToMinutes(timeRange.endTime);
-
-    if (totalMinutes >= rangeStart && totalMinutes < rangeEnd) {
-      // Calculer combien de minutes sont dans cette plage
-      const minutesInRange = Math.min(rangeEnd - totalMinutes, 60); // Max 60 minutes par heure
-      return { range: timeRange, minutesInRange };
-    }
-  }
-
-  return null;
-}
-
-/**
  * Calcule les heures travaillées en décomposant par plages horaires
  */
 export async function calculateHoursWorked(
@@ -90,7 +67,6 @@ export async function calculateHoursWorked(
 ): Promise<CalculatedHours> {
   const { employeeId, clockInTime, clockOutTime, date } = timeEntry;
 
-  // 1. Récupérer l'employé et son cycle de travail
   const employee = await prisma.employee.findFirst({
     where: {
       id: employeeId,
@@ -99,20 +75,9 @@ export async function calculateHoursWorked(
     include: {
       workCycle: {
         include: {
-          schedules: {
+          schedule: {
             include: {
-              schedule: {
-                include: {
-                  periods: {
-                    include: {
-                      timeRanges: true,
-                    },
-                    orderBy: {
-                      startTime: 'asc',
-                    },
-                  },
-                },
-              },
+              slots: true,
             },
           },
         },
@@ -124,54 +89,49 @@ export async function calculateHoursWorked(
     throw new Error('Employé sans cycle de travail assigné');
   }
 
-  // 2. Trouver l'horaire correspondant au jour de la semaine
-  const dayOfWeek = date.getDay(); // 0 = Dimanche, 1 = Lundi, etc.
-  const workCycleSchedule = employee.workCycle.schedules.find(
-    (wcs: any) => wcs.dayOfWeek === dayOfWeek || wcs.isDefault
-  );
+  const schedule = employee.workCycle.schedule;
 
-  if (!workCycleSchedule) {
-    // Pas d'horaire pour ce jour, toutes les heures sont normales
+  if (!schedule) {
     const hoursWorked = (clockOutTime.getTime() - clockInTime.getTime()) / (1000 * 60 * 60);
+    const totalHours = hoursWorked;
     return {
-      normalHours: hoursWorked,
+      normalHours: totalHours,
       overtimeHours: 0,
       specialHours: 0,
       breakdown: {
-        normal: hoursWorked,
+        normal: totalHours,
         overtime: 0,
         nightShift: 0,
-        sunday: 0,
-        holiday: 0,
+        sunday: isSunday(date) ? totalHours : 0,
+        holiday: isHoliday(date) ? totalHours : 0,
         other: 0,
       },
       ranges: [],
     };
   }
 
-  const schedule = workCycleSchedule.schedule;
-
-  // 3. Extraire les heures de début et fin du pointage
-  const clockInHour = clockInTime.getHours();
-  const clockInMinute = clockInTime.getMinutes();
-  const clockOutHour = clockOutTime.getHours();
-  const clockOutMinute = clockOutTime.getMinutes();
-
-  // 4. Calculer les heures totales travaillées
   const totalMinutesWorked = Math.round(
     (clockOutTime.getTime() - clockInTime.getTime()) / (1000 * 60)
   );
-  const totalHoursWorked = minutesToHours(totalMinutesWorked);
+  const clockInMinutes = clockInTime.getHours() * 60 + clockInTime.getMinutes();
+  let clockOutMinutes = clockOutTime.getHours() * 60 + clockOutTime.getMinutes();
 
-  // 5. Calculer les heures par plages horaires
-  const breakdown = {
-    normal: 0,
-    overtime: 0,
-    nightShift: 0,
-    sunday: 0,
-    holiday: 0,
-    other: 0,
-  };
+  if (clockOutMinutes < clockInMinutes) {
+    clockOutMinutes += 1440;
+  }
+
+  let scheduledStart = timeToMinutes(schedule.startTime);
+  let scheduledEnd = timeToMinutes(schedule.endTime);
+  if (scheduledEnd <= scheduledStart) {
+    scheduledEnd += 1440;
+  }
+
+  const slots = schedule.slots || [];
+
+  let normalMinutes = totalMinutesWorked;
+  let overtimeMinutes = 0;
+  let specialMinutes = 0;
+  let breakMinutes = 0;
 
   const ranges: Array<{
     start: string;
@@ -181,156 +141,92 @@ export async function calculateHoursWorked(
     multiplier: number;
   }> = [];
 
-  // Convertir les heures de pointage en minutes
-  const clockInMinutes = clockInTime.getHours() * 60 + clockInTime.getMinutes();
-  const clockOutMinutes = clockOutTime.getHours() * 60 + clockOutTime.getMinutes();
-
-  // Si les heures traversent minuit, ajuster
-  let effectiveClockOut = clockOutMinutes;
-  if (effectiveClockOut < clockInMinutes) {
-    effectiveClockOut += 1440; // Ajouter 24 heures
+  // Heures supplémentaires avant l'horaire prévu
+  if (clockInMinutes < scheduledStart) {
+    const minutes = Math.min(scheduledStart - clockInMinutes, totalMinutesWorked);
+    overtimeMinutes += Math.max(minutes, 0);
+    normalMinutes -= Math.max(minutes, 0);
   }
 
-  // Parcourir les périodes et calculer l'intersection avec les heures travaillées
-  if (schedule.periods && schedule.periods.length > 0) {
-    for (const period of schedule.periods) {
-      const periodStart = timeToMinutes(period.startTime);
-      const periodEnd = timeToMinutes(period.endTime);
+  // Heures supplémentaires après l'horaire prévu
+  if (clockOutMinutes > scheduledEnd) {
+    const minutes = clockOutMinutes - Math.max(scheduledEnd, clockInMinutes);
+    overtimeMinutes += Math.max(minutes, 0);
+    normalMinutes -= Math.max(minutes, 0);
+  }
 
-      // Calculer l'intersection entre les heures travaillées et la période
-      const intersectionStart = Math.max(clockInMinutes, periodStart);
-      const intersectionEnd = Math.min(effectiveClockOut, periodEnd);
+  for (const slot of slots) {
+    let slotStart = timeToMinutes(slot.startTime);
+    let slotEnd = timeToMinutes(slot.endTime);
+    if (slotEnd <= slotStart) {
+      slotEnd += 1440;
+    }
 
-      if (intersectionStart < intersectionEnd) {
-        // Il y a une intersection, parcourir les plages de cette période
-        for (const timeRange of period.timeRanges || []) {
-          const rangeStart = timeToMinutes(timeRange.startTime);
-          const rangeEnd = timeToMinutes(timeRange.endTime);
+    const overlapStart = Math.max(clockInMinutes, slotStart);
+    const overlapEnd = Math.min(clockOutMinutes, slotEnd);
 
-          // Calculer l'intersection entre l'intersection période et la plage
-          const rangeIntersectionStart = Math.max(intersectionStart, rangeStart);
-          const rangeIntersectionEnd = Math.min(intersectionEnd, rangeEnd);
+    if (overlapStart < overlapEnd) {
+      const minutes = overlapEnd - overlapStart;
+      const hours = minutesToHours(minutes);
+      const slotLabel = slot.label || slot.slotType;
+      const slotMultiplier =
+        slot.multiplier !== undefined && slot.multiplier !== null
+          ? slot.multiplier
+          : slot.slotType === 'OVERTIME'
+          ? 1.25
+          : slot.slotType === 'SPECIAL'
+          ? 1.5
+          : 1.0;
 
-          if (rangeIntersectionStart < rangeIntersectionEnd) {
-            const hours = minutesToHours(rangeIntersectionEnd - rangeIntersectionStart);
+      ranges.push({
+        start: `${Math.floor(overlapStart / 60)}:${String(overlapStart % 60).padStart(2, '0')}`,
+        end: `${Math.floor(overlapEnd / 60)}:${String(overlapEnd % 60).padStart(2, '0')}`,
+        hours,
+        label: slotLabel,
+        type: slot.slotType,
+        multiplier: slotMultiplier,
+      });
 
-            ranges.push({
-              start: `${Math.floor(rangeIntersectionStart / 60)}:${String(rangeIntersectionStart % 60).padStart(2, '0')}`,
-              end: `${Math.floor(rangeIntersectionEnd / 60)}:${String(rangeIntersectionEnd % 60).padStart(2, '0')}`,
-              hours,
-              type: timeRange.rangeType,
-              multiplier: timeRange.multiplier,
-            });
-
-            // Accumuler dans le breakdown
-            switch (timeRange.rangeType) {
-              case 'NORMAL':
-                breakdown.normal += hours;
-                break;
-              case 'OVERTIME':
-                breakdown.overtime += hours;
-                break;
-              case 'NIGHT_SHIFT':
-                breakdown.nightShift += hours;
-                break;
-              case 'SUNDAY':
-                breakdown.sunday += hours;
-                break;
-              case 'HOLIDAY':
-                breakdown.holiday += hours;
-                break;
-              default:
-                breakdown.other += hours;
-            }
-          }
-        }
+      switch (slot.slotType) {
+        case 'BREAK':
+          breakMinutes += minutes;
+          normalMinutes -= minutes;
+          break;
+        case 'OVERTIME':
+          overtimeMinutes += minutes;
+          normalMinutes -= minutes;
+          break;
+        case 'SPECIAL':
+          specialMinutes += minutes;
+          normalMinutes -= minutes;
+          break;
+        case 'ENTRY_GRACE':
+        default:
+          // compté comme normal
+          break;
       }
     }
-  } else {
-    // Pas de périodes définies, utiliser l'horaire global
-    const scheduleStart = schedule.startTime ? timeToMinutes(schedule.startTime) : 0;
-    const scheduleEnd = schedule.endTime ? timeToMinutes(schedule.endTime) : 1440;
-
-    const intersectionStart = Math.max(clockInMinutes, scheduleStart);
-    const intersectionEnd = Math.min(effectiveClockOut, scheduleEnd);
-
-    if (intersectionStart < intersectionEnd) {
-      const hours = minutesToHours(intersectionEnd - intersectionStart);
-      breakdown.normal += hours;
-      ranges.push({
-        start: `${Math.floor(intersectionStart / 60)}:${String(intersectionStart % 60).padStart(2, '0')}`,
-        end: `${Math.floor(intersectionEnd / 60)}:${String(intersectionEnd % 60).padStart(2, '0')}`,
-        hours,
-        type: 'NORMAL',
-        multiplier: 1.0,
-      });
-    }
-
-    // Heures hors horaire = supplémentaires
-    if (clockInMinutes < scheduleStart) {
-      const hours = minutesToHours(Math.min(scheduleStart - clockInMinutes, effectiveClockOut - clockInMinutes));
-      breakdown.overtime += hours;
-    }
-    if (effectiveClockOut > scheduleEnd) {
-      const hours = minutesToHours(Math.min(effectiveClockOut - scheduleEnd, effectiveClockOut - clockInMinutes));
-      breakdown.overtime += hours;
-    }
   }
 
-  // Vérifier si on est dimanche ou jour férié et appliquer les majorations
-  if (isSunday(date) && breakdown.normal > 0) {
-    // Majoration dimanche : les heures normales deviennent des heures dimanche
-    breakdown.sunday += breakdown.normal;
-    breakdown.normal = 0;
-  }
+  if (normalMinutes < 0) normalMinutes = 0;
+  if (overtimeMinutes < 0) overtimeMinutes = 0;
+  if (specialMinutes < 0) specialMinutes = 0;
+  if (breakMinutes < 0) breakMinutes = 0;
 
-  if (isHoliday(date) && breakdown.normal > 0) {
-    // Majoration jour férié : les heures normales deviennent des heures fériées
-    breakdown.holiday += breakdown.normal;
-    breakdown.normal = 0;
-  }
+  const normalHours = minutesToHours(normalMinutes);
+  const overtimeHours = minutesToHours(overtimeMinutes);
+  const slotSpecialHours = minutesToHours(specialMinutes);
 
-  // 6. Calculer les heures normales vs supplémentaires
-  const weeklyHours = employee.workCycle.weeklyHours || 40;
-  const cycleDays = employee.workCycle.cycleDays || 7;
-  const dailyHours = weeklyHours / cycleDays;
+  const breakdown = {
+    normal: normalHours,
+    overtime: overtimeHours,
+    nightShift: 0,
+    sunday: isSunday(date) ? minutesToHours(totalMinutesWorked) : 0,
+    holiday: isHoliday(date) ? minutesToHours(totalMinutesWorked) : 0,
+    other: minutesToHours(breakMinutes),
+  };
 
-  // Calculer les heures accumulées sur la période
-  const periodStart = new Date(date);
-  periodStart.setDate(periodStart.getDate() - (periodStart.getDay() || 7) + 1); // Lundi de la semaine
-  periodStart.setHours(0, 0, 0, 0);
-
-  const timeEntriesThisPeriod = await prisma.timeEntry.findMany({
-    where: {
-      employeeId,
-      date: {
-        gte: periodStart,
-        lte: date,
-      },
-      deletedAt: null,
-    },
-  });
-
-  let totalHoursThisPeriod = breakdown.normal + breakdown.overtime;
-  for (const entry of timeEntriesThisPeriod) {
-    if (entry.clockInTime && entry.clockOutTime) {
-      const hours = (entry.clockOutTime.getTime() - entry.clockInTime.getTime()) / (1000 * 60 * 60);
-      totalHoursThisPeriod += hours;
-    }
-  }
-
-  // Si on dépasse les heures normales du cycle, les heures supplémentaires sont automatiquement des heures sup
-  const thresholdHours = (weeklyHours / cycleDays) * (date.getDate() - periodStart.getDate() + 1);
-  
-  if (totalHoursThisPeriod > thresholdHours) {
-    const excess = totalHoursThisPeriod - thresholdHours;
-    breakdown.overtime += excess;
-    breakdown.normal = Math.max(0, breakdown.normal - excess);
-  }
-
-  const normalHours = breakdown.normal;
-  const overtimeHours = breakdown.overtime + breakdown.nightShift * 0.5; // Nuit = 50% de sup
-  const specialHours = breakdown.sunday + breakdown.holiday + breakdown.other;
+  const specialHours = slotSpecialHours + breakdown.sunday + breakdown.holiday;
 
   return {
     normalHours,

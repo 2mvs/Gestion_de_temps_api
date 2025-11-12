@@ -59,46 +59,101 @@ async function main() {
 
   console.log('✅ Unités organisationnelles créées');
 
+  // Créer des horaires de travail
+  const scheduleStandard = await prisma.workSchedule.create({
+    data: {
+      label: 'Lundi - Vendredi 8h-17h',
+      abbreviation: 'STD40',
+      startTime: '08:00',
+      endTime: '17:00',
+      theoreticalDayHours: 8,
+      theoreticalMorningHours: 4,
+      theoreticalAfternoonHours: 4,
+      slots: {
+        create: [
+          {
+            slotType: 'BREAK',
+            startTime: '12:00',
+            endTime: '13:00',
+            label: 'Pause déjeuner',
+            multiplier: 1.0,
+          },
+          {
+            slotType: 'OVERTIME',
+            startTime: '17:00',
+            endTime: '20:00',
+            label: 'Heures supplémentaires soir',
+            multiplier: 1.50,
+          },
+          {
+            slotType: 'SPECIAL',
+            startTime: '05:00',
+            endTime: '06:00',
+            label: 'Heures de nuit',
+            multiplier: 1.75,
+          },
+        ],
+      },
+    },
+  });
+
+  const scheduleFlex = await prisma.workSchedule.create({
+    data: {
+      label: 'Lundi - Samedi 9h-16h',
+      abbreviation: 'FLEX35',
+      startTime: '09:00',
+      endTime: '16:00',
+      theoreticalDayHours: 6.5,
+      theoreticalMorningHours: 3.5,
+      theoreticalAfternoonHours: 3,
+      slots: {
+        create: [
+          {
+            slotType: 'BREAK',
+            startTime: '12:30',
+            endTime: '13:00',
+            label: 'Pause midi',
+            multiplier: 1.0,
+          },
+          {
+            slotType: 'ENTRY_GRACE',
+            startTime: '08:45',
+            endTime: '09:15',
+            label: 'Franchise d\'entrée',
+            multiplier: 1.0,
+          },
+          {
+            slotType: 'SPECIAL',
+            startTime: '16:00',
+            endTime: '18:00',
+            label: 'Heures spéciales soir',
+            multiplier: 1.60,
+          },
+        ],
+      },
+    },
+  });
+
+  console.log('✅ Horaires créés');
+
   // Créer des cycles de travail
   const cycle40h = await prisma.workCycle.create({
     data: {
-      name: 'Cycle standard 40h',
+      label: 'Cycle standard 40h',
       abbreviation: 'STD40',
-      description: 'Cycle de travail standard de 40 heures par semaine',
-      cycleType: 'WEEKLY',
-      cycleDays: 7,
-      weeklyHours: 40,
-      overtimeThreshold: 40,
+      scheduleId: scheduleStandard.id,
     },
   });
 
   const cycle35h = await prisma.workCycle.create({
     data: {
-      name: 'Cycle 35h',
-      abbreviation: 'STD35',
-      description: 'Cycle de travail de 35 heures par semaine',
-      cycleType: 'WEEKLY',
-      cycleDays: 7,
-      weeklyHours: 35,
-      overtimeThreshold: 35,
+      label: 'Cycle flexible 35h',
+      abbreviation: 'FLEX35',
+      scheduleId: scheduleFlex.id,
     },
   });
 
   console.log('✅ Cycles de travail créés');
-
-  // Créer des horaires pour le cycle 40h
-  const schedule1 = await prisma.schedule.create({
-    data: {
-      label: 'Lundi - Vendredi 8h-17h',
-      abbreviation: 'LV_8_17',
-      scheduleType: 'STANDARD',
-      workCycleId: cycle40h.id,
-      totalHours: 8,
-      breakDuration: 60,
-    },
-  });
-
-  console.log('✅ Horaires créés');
 
   // Créer des employés
   const employee1 = await prisma.employee.create({

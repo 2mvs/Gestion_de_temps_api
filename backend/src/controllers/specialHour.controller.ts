@@ -2,14 +2,27 @@ import { Request, Response } from 'express';
 import prisma from '../config/database';
 import { CustomError } from '../middlewares/error.middleware';
 import { createAuditLog } from '../utils/audit';
+import { managerHasAccessToEmployee } from '../utils/access';
 
 export const getSpecialHoursByEmployee = async (req: Request, res: Response): Promise<void> => {
   try {
     const { employeeId } = req.params;
 
+    const parsedEmployeeId = parseInt(employeeId, 10);
+    if (Number.isNaN(parsedEmployeeId)) {
+      throw new CustomError('Identifiant employé invalide', 400);
+    }
+
+    if (req.user?.role === 'MANAGER') {
+      const hasAccess = await managerHasAccessToEmployee(req.user.userId, parsedEmployeeId);
+      if (!hasAccess) {
+        throw new CustomError('Accès refusé', 403);
+      }
+    }
+
     const specialHours = await prisma.specialHour.findMany({
       where: {
-        employeeId: parseInt(employeeId),
+        employeeId: parsedEmployeeId,
       },
       include: {
         employee: {
@@ -36,9 +49,21 @@ export const createSpecialHour = async (req: Request, res: Response): Promise<vo
   try {
     const { employeeId, date, hours, hourType, reason } = req.body;
 
+    const parsedEmployeeId = parseInt(employeeId, 10);
+    if (Number.isNaN(parsedEmployeeId)) {
+      throw new CustomError('Identifiant employé invalide', 400);
+    }
+
+    if (req.user?.role === 'MANAGER') {
+      const hasAccess = await managerHasAccessToEmployee(req.user.userId, parsedEmployeeId);
+      if (!hasAccess) {
+        throw new CustomError('Accès refusé', 403);
+      }
+    }
+
     const specialHour = await prisma.specialHour.create({
       data: {
-        employeeId: parseInt(employeeId),
+        employeeId: parsedEmployeeId,
         date: new Date(date),
         hours: parseFloat(hours),
         hourType: hourType || 'HOLIDAY',
@@ -84,6 +109,13 @@ export const approveSpecialHour = async (req: Request, res: Response): Promise<v
 
     if (!oldSpecialHour) {
       throw new CustomError('Heures spéciales non trouvées', 404);
+    }
+
+    if (req.user?.role === 'MANAGER') {
+      const hasAccess = await managerHasAccessToEmployee(req.user.userId, oldSpecialHour.employeeId);
+      if (!hasAccess) {
+        throw new CustomError('Accès refusé', 403);
+      }
     }
 
     const specialHour = await prisma.specialHour.update({

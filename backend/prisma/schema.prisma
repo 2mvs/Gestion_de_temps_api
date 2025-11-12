@@ -28,6 +28,7 @@ model User {
   auditLogs        AuditLog[]
   notifications    Notification[]
   approvedAbsences Absence[]      @relation("ApprovedBy")
+  managedUnits     OrganizationalUnit[] @relation("UnitManager")
 
   @@map("users")
 }
@@ -109,6 +110,8 @@ model OrganizationalUnit {
 
   // Relations
   employees    Employee[]
+  managerId    Int?
+  manager      User?   @relation("UnitManager", fields: [managerId], references: [id])
   
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -121,133 +124,63 @@ model OrganizationalUnit {
 // MODÈLES CYCLES DE TRAVAIL ET HORAIRES
 // ============================================
 
+model WorkSchedule {
+  id                          Int                 @id @default(autoincrement())
+  label                       String
+  abbreviation                String?
+  startTime                   String              // Format HH:MM
+  endTime                     String              // Format HH:MM
+  theoreticalDayHours         Float?
+  theoreticalMorningHours     Float?
+  theoreticalAfternoonHours   Float?
+
+  slots       WorkScheduleSlot[]
+  workCycles  WorkCycle[]
+
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  deletedAt   DateTime?
+
+  @@map("work_schedules")
+}
+
+model WorkScheduleSlot {
+  id         Int               @id @default(autoincrement())
+  scheduleId Int
+  schedule   WorkSchedule      @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  slotType   ScheduleSlotType
+  startTime  String            // Format HH:MM
+  endTime    String            // Format HH:MM
+  label      String?
+  multiplier Float             @default(1.0)
+
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  @@map("work_schedule_slots")
+}
+
+enum ScheduleSlotType {
+  ENTRY_GRACE
+  BREAK
+  OVERTIME
+  SPECIAL
+}
+
 model WorkCycle {
-  id                Int        @id @default(autoincrement())
-  name              String
-  abbreviation      String?
-  description       String?    @db.Text
-  cycleType         CycleType  @default(WEEKLY)
-  cycleDays         Int        @default(7)
-  weeklyHours       Float      @default(40)
-  overtimeThreshold Float?
-  
-  // Relations
-  employees         Employee[]
-  schedules         WorkCycleSchedule[]  // Relation many-to-many
-  
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @updatedAt
-  deletedAt         DateTime?
-
-  @@map("work_cycles")
-}
-
-enum CycleType {
-  WEEKLY
-  BIWEEKLY
-  MONTHLY
-  CUSTOM
-}
-
-model Schedule {
-  id            Int        @id @default(autoincrement())
-  label         String
-  abbreviation  String?
-  scheduleType  ScheduleType @default(STANDARD)
-  dayOfWeek     Int?       // 0=Dimanche, 1=Lundi, ..., 6=Samedi
-  startTime     String?    // Format "HH:MM"
-  endTime       String?    // Format "HH:MM"
-  breakDuration Int?       // en minutes
-  totalHours    Float?
-  
-  // Relations
-  workCycles    WorkCycleSchedule[]  // Relation many-to-many avec WorkCycle
-  periods       Period[]              // Périodes de l'horaire
-  
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
-  deletedAt     DateTime?
-
-  @@map("schedules")
-}
-
-// Table de liaison many-to-many entre WorkCycle et Schedule
-model WorkCycleSchedule {
-  id           Int        @id @default(autoincrement())
-  workCycleId  Int
+  id           Int           @id @default(autoincrement())
+  label        String
+  abbreviation String?
   scheduleId   Int
-  dayOfWeek    Int?       // Jour de la semaine pour ce schedule dans le cycle
-  isDefault    Boolean    @default(false)
-  
-  workCycle    WorkCycle  @relation(fields: [workCycleId], references: [id], onDelete: Cascade)
-  schedule     Schedule   @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
-  
+  schedule     WorkSchedule  @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  employees    Employee[]
+
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
-  
-  @@unique([workCycleId, scheduleId, dayOfWeek])
-  @@map("work_cycle_schedules")
-}
+  deletedAt    DateTime?
 
-// Périodes dans un horaire (ex: matin, après-midi)
-model Period {
-  id          Int      @id @default(autoincrement())
-  scheduleId  Int
-  schedule    Schedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
-  
-  name        String   // Ex: "Matin", "Après-midi", "Nuit"
-  startTime   String   // Format "HH:MM"
-  endTime     String   // Format "HH:MM"
-  periodType  PeriodType @default(REGULAR)
-  
-  // Relations
-  timeRanges  TimeRange[]
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  @@map("periods")
-}
-
-enum PeriodType {
-  REGULAR       // Période normale
-  BREAK         // Pause
-  OVERTIME      // Heures supplémentaires
-  SPECIAL       // Heures spéciales
-}
-
-// Plages horaires dans une période (pour calcul auto heures sup/spéciales)
-model TimeRange {
-  id         Int       @id @default(autoincrement())
-  periodId   Int
-  period     Period    @relation(fields: [periodId], references: [id], onDelete: Cascade)
-  
-  name       String    // Ex: "Heures normales", "Heures de nuit"
-  startTime  String    // Format "HH:MM"
-  endTime    String    // Format "HH:MM"
-  rangeType  TimeRangeType @default(NORMAL)
-  multiplier Float     @default(1.0)  // 1.0 = normal, 1.25 = 25% sup, 1.5 = 50% sup
-  
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-  
-  @@map("time_ranges")
-}
-
-enum TimeRangeType {
-  NORMAL          // Heures normales
-  OVERTIME        // Heures supplémentaires
-  NIGHT_SHIFT     // Heures de nuit
-  SUNDAY          // Dimanche
-  HOLIDAY         // Jour férié
-  SPECIAL         // Autre majoration
-}
-
-enum ScheduleType {
-  STANDARD
-  NIGHT_SHIFT
-  FLEXIBLE
-  CUSTOM
+  @@map("work_cycles")
 }
 
 // ============================================

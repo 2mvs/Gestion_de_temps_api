@@ -2,14 +2,27 @@ import { Request, Response } from 'express';
 import prisma from '../config/database';
 import { CustomError } from '../middlewares/error.middleware';
 import { createAuditLog } from '../utils/audit';
+import { managerHasAccessToEmployee } from '../utils/access';
 
 export const getOvertimesByEmployee = async (req: Request, res: Response): Promise<void> => {
   try {
     const { employeeId } = req.params;
 
+    const parsedEmployeeId = parseInt(employeeId, 10);
+    if (Number.isNaN(parsedEmployeeId)) {
+      throw new CustomError('Identifiant employé invalide', 400);
+    }
+
+    if (req.user?.role === 'MANAGER') {
+      const hasAccess = await managerHasAccessToEmployee(req.user.userId, parsedEmployeeId);
+      if (!hasAccess) {
+        throw new CustomError('Accès refusé', 403);
+      }
+    }
+
     const overtimes = await prisma.overtime.findMany({
       where: {
-        employeeId: parseInt(employeeId),
+        employeeId: parsedEmployeeId,
       },
       include: {
         employee: {
@@ -36,9 +49,21 @@ export const createOvertime = async (req: Request, res: Response): Promise<void>
   try {
     const { employeeId, date, hours, reason } = req.body;
 
+    const parsedEmployeeId = parseInt(employeeId, 10);
+    if (Number.isNaN(parsedEmployeeId)) {
+      throw new CustomError('Identifiant employé invalide', 400);
+    }
+
+    if (req.user?.role === 'MANAGER') {
+      const hasAccess = await managerHasAccessToEmployee(req.user.userId, parsedEmployeeId);
+      if (!hasAccess) {
+        throw new CustomError('Accès refusé', 403);
+      }
+    }
+
     const overtime = await prisma.overtime.create({
       data: {
-        employeeId: parseInt(employeeId),
+        employeeId: parsedEmployeeId,
         date: new Date(date),
         hours: parseFloat(hours),
         reason: reason || null,
@@ -83,6 +108,13 @@ export const approveOvertime = async (req: Request, res: Response): Promise<void
 
     if (!oldOvertime) {
       throw new CustomError('Heures supplémentaires non trouvées', 404);
+    }
+
+    if (req.user?.role === 'MANAGER') {
+      const hasAccess = await managerHasAccessToEmployee(req.user.userId, oldOvertime.employeeId);
+      if (!hasAccess) {
+        throw new CustomError('Accès refusé', 403);
+      }
     }
 
     const overtime = await prisma.overtime.update({

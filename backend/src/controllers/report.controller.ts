@@ -70,8 +70,17 @@ export const getEmployeesReport = async (req: Request, res: Response): Promise<v
         workCycle: {
           select: {
             id: true,
-            name: true,
-            weeklyHours: true,
+            label: true,
+            abbreviation: true,
+            schedule: {
+              select: {
+                id: true,
+                label: true,
+                startTime: true,
+                endTime: true,
+                theoreticalDayHours: true,
+              },
+            },
           },
         },
       },

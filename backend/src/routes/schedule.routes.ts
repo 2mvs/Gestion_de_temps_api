@@ -16,6 +16,8 @@ router.use(authenticate);
 
 const createValidation = [
   body('label').notEmpty().withMessage('Le libellé est requis'),
+  body('startTime').notEmpty().withMessage('L\'heure de début est requise'),
+  body('endTime').notEmpty().withMessage('L\'heure de fin est requise'),
 ];
 
 router.get('/', getAllSchedules);

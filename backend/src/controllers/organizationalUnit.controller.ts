@@ -32,6 +32,13 @@ export const getAllOrganizationalUnits = async (req: Request, res: Response): Pr
             lastName: true,
           },
         },
+      manager: {
+        select: {
+          id: true,
+          email: true,
+          role: true,
+        },
+      },
       },
       orderBy: {
         level: 'asc',
@@ -47,56 +54,49 @@ export const getAllOrganizationalUnits = async (req: Request, res: Response): Pr
 export const getOrganizationalUnitTree = async (req: Request, res: Response): Promise<void> => {
   try {
     // Récupérer toutes les unités racines (sans parent)
+    const managerSelection = {
+      select: {
+        id: true,
+        email: true,
+        role: true,
+      },
+    };
+
+    const employeeSelection = {
+      select: {
+        id: true,
+        employeeNumber: true,
+        firstName: true,
+        lastName: true,
+      },
+    };
+
     const rootUnits = await prisma.organizationalUnit.findMany({
       where: {
         parentId: null,
         deletedAt: null,
       },
       include: {
+        manager: managerSelection,
         children: {
           include: {
+            manager: managerSelection,
             children: {
               include: {
+                manager: managerSelection,
                 children: {
                   include: {
-                    employees: {
-                      select: {
-                        id: true,
-                        employeeNumber: true,
-                        firstName: true,
-                        lastName: true,
-                      },
-                    },
+                    manager: managerSelection,
+                    employees: employeeSelection,
                   },
                 },
-                employees: {
-                  select: {
-                    id: true,
-                    employeeNumber: true,
-                    firstName: true,
-                    lastName: true,
-                  },
-                },
+                employees: employeeSelection,
               },
             },
-            employees: {
-              select: {
-                id: true,
-                employeeNumber: true,
-                firstName: true,
-                lastName: true,
-              },
-            },
+            employees: employeeSelection,
           },
         },
-        employees: {
-          select: {
-            id: true,
-            employeeNumber: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
+        employees: employeeSelection,
       },
     });
 
@@ -122,6 +122,13 @@ export const getRootOrganizationalUnits = async (req: Request, res: Response): P
             lastName: true,
           },
         },
+        manager: {
+          select: {
+            id: true,
+            email: true,
+            role: true,
+          },
+        },
       },
     });
 
@@ -144,6 +151,13 @@ export const getOrganizationalUnitById = async (req: Request, res: Response): Pr
         parent: true,
         children: true,
         employees: true,
+        manager: {
+          select: {
+            id: true,
+            email: true,
+            role: true,
+          },
+        },
       },
     });
 
@@ -175,6 +189,13 @@ export const getOrganizationalUnitChildren = async (req: Request, res: Response)
             lastName: true,
           },
         },
+        manager: {
+          select: {
+            id: true,
+            email: true,
+            role: true,
+          },
+        },
       },
     });
 
@@ -186,7 +207,27 @@ export const getOrganizationalUnitChildren = async (req: Request, res: Response)
 
 export const createOrganizationalUnit = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { code, name, description, level, parentId } = req.body;
+    if (req.user?.role !== 'ADMIN') {
+      throw new CustomError('Accès refusé', 403);
+    }
+
+    const { code, name, description, level, parentId, managerId } = req.body;
+
+    let managerUserId: number | null = null;
+    if (managerId !== undefined && managerId !== null && managerId !== '') {
+      const parsedManagerId = parseInt(managerId);
+      if (Number.isNaN(parsedManagerId)) {
+        throw new CustomError('Manager invalide', 400);
+      }
+      const managerUser = await prisma.user.findUnique({
+        where: { id: parsedManagerId },
+        select: { id: true, role: true },
+      });
+      if (!managerUser || managerUser.role !== 'MANAGER') {
+        throw new CustomError('Le manager sélectionné doit avoir le rôle MANAGER', 400);
+      }
+      managerUserId = managerUser.id;
+    }
 
     const unit = await prisma.organizationalUnit.create({
       data: {
@@ -195,9 +236,17 @@ export const createOrganizationalUnit = async (req: Request, res: Response): Pro
         description: description || null,
         level: level || 0,
         parentId: parentId ? parseInt(parentId) : null,
+        managerId: managerUserId,
       },
       include: {
         parent: true,
+        manager: {
+          select: {
+            id: true,
+            email: true,
+            role: true,
+          },
+        },
       },
     });
 
@@ -222,8 +271,12 @@ export const createOrganizationalUnit = async (req: Request, res: Response): Pro
 
 export const updateOrganizationalUnit = async (req: Request, res: Response): Promise<void> => {
   try {
+    if (req.user?.role !== 'ADMIN') {
+      throw new CustomError('Accès refusé', 403);
+    }
+
     const { id } = req.params;
-    const { code, name, description, level, parentId } = req.body;
+    const { code, name, description, level, parentId, managerId } = req.body;
 
     const oldUnit = await prisma.organizationalUnit.findFirst({
       where: {
@@ -236,6 +289,26 @@ export const updateOrganizationalUnit = async (req: Request, res: Response): Pro
       throw new CustomError('Unité organisationnelle non trouvée', 404);
     }
 
+    let managerUserId: number | null | undefined = undefined;
+    if (managerId !== undefined) {
+      if (managerId === null || managerId === '') {
+        managerUserId = null;
+      } else {
+        const parsedManagerId = parseInt(managerId);
+        if (Number.isNaN(parsedManagerId)) {
+          throw new CustomError('Manager invalide', 400);
+        }
+        const managerUser = await prisma.user.findUnique({
+          where: { id: parsedManagerId },
+          select: { id: true, role: true },
+        });
+        if (!managerUser || managerUser.role !== 'MANAGER') {
+          throw new CustomError('Le manager sélectionné doit avoir le rôle MANAGER', 400);
+        }
+        managerUserId = managerUser.id;
+      }
+    }
+
     const unit = await prisma.organizationalUnit.update({
       where: { id: parseInt(id) },
       data: {
@@ -244,9 +317,17 @@ export const updateOrganizationalUnit = async (req: Request, res: Response): Pro
         description: description || null,
         level,
         parentId: parentId ? parseInt(parentId) : null,
+        managerId: managerUserId !== undefined ? managerUserId : undefined,
       },
       include: {
         parent: true,
+        manager: {
+          select: {
+            id: true,
+            email: true,
+            role: true,
+          },
+        },
       },
     });
 
@@ -272,6 +353,10 @@ export const updateOrganizationalUnit = async (req: Request, res: Response): Pro
 
 export const deleteOrganizationalUnit = async (req: Request, res: Response): Promise<void> => {
   try {
+    if (req.user?.role !== 'ADMIN') {
+      throw new CustomError('Accès refusé', 403);
+    }
+
     const { id } = req.params;
 
     const unit = await prisma.organizationalUnit.findFirst({

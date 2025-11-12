@@ -5,31 +5,10 @@ import { createAuditLog } from '../utils/audit';
 
 export const getAllSchedules = async (req: Request, res: Response): Promise<void> => {
   try {
-    const schedules = await prisma.schedule.findMany({
-      where: {
-        deletedAt: null,
-      },
+    const schedules = await prisma.workSchedule.findMany({
+      where: { deletedAt: null },
       include: {
-        // workCycles sera disponible après migration Prisma
-        // workCycles: {
-        //   include: {
-        //     workCycle: {
-        //       select: {
-        //         id: true,
-        //         name: true,
-        //         abbreviation: true,
-        //       },
-        //     },
-        //   },
-        // },
-        periods: {
-          include: {
-            timeRanges: {
-              orderBy: {
-                startTime: 'asc',
-              },
-            },
-          },
+        slots: {
           orderBy: {
             startTime: 'asc',
           },
@@ -40,7 +19,7 @@ export const getAllSchedules = async (req: Request, res: Response): Promise<void
       },
     });
 
-    res.json(schedules);
+    res.json({ data: schedules });
   } catch (error) {
     throw error;
   }
@@ -58,17 +37,9 @@ export const getSchedulesByEmployee = async (req: Request, res: Response): Promi
       include: {
         workCycle: {
           include: {
-            schedules: {
+            schedule: {
               include: {
-                schedule: {
-                  include: {
-                    periods: {
-                      include: {
-                        timeRanges: true,
-                      },
-                    },
-                  },
-                },
+                slots: true,
               },
             },
           },
@@ -76,17 +47,11 @@ export const getSchedulesByEmployee = async (req: Request, res: Response): Promi
       },
     });
 
-    if (!employee || !employee.workCycle) {
-      throw new CustomError('Employé non trouvé ou sans cycle de travail', 404);
+    if (!employee || !employee.workCycle || !employee.workCycle.schedule) {
+      throw new CustomError('Employé non trouvé ou sans horaire assigné', 404);
     }
 
-    const schedules = employee.workCycle.schedules.map((wcs: any) => ({
-      ...wcs.schedule,
-      dayOfWeek: wcs.dayOfWeek,
-      isDefault: wcs.isDefault,
-    }));
-
-    res.json({ data: schedules });
+    res.json({ data: employee.workCycle.schedule });
   } catch (error) {
     throw error;
   }
@@ -97,60 +62,57 @@ export const createSchedule = async (req: Request, res: Response): Promise<void>
     const {
       label,
       abbreviation,
-      scheduleType,
-      dayOfWeek,
       startTime,
       endTime,
-      breakDuration,
-      totalHours,
-      periods,
+      theoreticalDayHours,
+      theoreticalMorningHours,
+      theoreticalAfternoonHours,
+      slots,
     } = req.body;
 
-    const schedule = await prisma.schedule.create({
+    const schedule = await prisma.workSchedule.create({
       data: {
         label,
         abbreviation: abbreviation || null,
-        scheduleType: scheduleType || 'STANDARD',
-        dayOfWeek: dayOfWeek !== undefined ? parseInt(dayOfWeek) : null,
-        startTime: startTime || null, // Maintenant String (HH:MM)
-        endTime: endTime || null, // Maintenant String (HH:MM)
-        breakDuration: breakDuration ? parseInt(breakDuration) : null,
-        totalHours: totalHours ? parseFloat(totalHours) : null,
-        periods: periods
-          ? {
-              create: periods.map((p: any) => ({
-                name: p.name,
-                startTime: p.startTime,
-                endTime: p.endTime,
-                periodType: p.periodType || 'REGULAR',
-                timeRanges: p.timeRanges
-                  ? {
-                      create: p.timeRanges.map((tr: any) => ({
-                        name: tr.name,
-                        startTime: tr.startTime,
-                        endTime: tr.endTime,
-                        rangeType: tr.rangeType || 'NORMAL',
-                        multiplier: tr.multiplier || 1.0,
-                      })),
-                    }
-                  : undefined,
-              })),
-            }
-          : undefined,
+        startTime,
+        endTime,
+        theoreticalDayHours:
+          theoreticalDayHours !== undefined && theoreticalDayHours !== null
+            ? parseFloat(theoreticalDayHours)
+            : null,
+        theoreticalMorningHours:
+          theoreticalMorningHours !== undefined && theoreticalMorningHours !== null
+            ? parseFloat(theoreticalMorningHours)
+            : null,
+        theoreticalAfternoonHours:
+          theoreticalAfternoonHours !== undefined && theoreticalAfternoonHours !== null
+            ? parseFloat(theoreticalAfternoonHours)
+            : null,
+        slots:
+          slots && Array.isArray(slots)
+            ? {
+                create: slots.map((slot: any) => ({
+                  slotType: slot.slotType,
+                  startTime: slot.startTime,
+                  endTime: slot.endTime,
+                  label: slot.label || null,
+                  multiplier:
+                    slot.multiplier !== undefined && slot.multiplier !== null
+                      ? parseFloat(slot.multiplier)
+                      : 1.0,
+                })),
+              }
+            : undefined,
       },
       include: {
-        periods: {
-          include: {
-            timeRanges: true,
-          },
-        },
+        slots: true,
       },
     });
 
     await createAuditLog({
       userId: req.user!.userId,
       action: 'CREATE',
-      modelType: 'Schedule',
+      modelType: 'WorkSchedule',
       modelId: schedule.id,
       newValue: schedule,
       ipAddress: req.ip,
@@ -172,25 +134,23 @@ export const updateSchedule = async (req: Request, res: Response): Promise<void>
     const {
       label,
       abbreviation,
-      scheduleType,
-      dayOfWeek,
       startTime,
       endTime,
-      breakDuration,
-      totalHours,
+      theoreticalDayHours,
+      theoreticalMorningHours,
+      theoreticalAfternoonHours,
+      slots,
     } = req.body;
 
-    const oldSchedule = await prisma.schedule.findFirst({
+    const scheduleId = parseInt(id);
+
+    const oldSchedule = await prisma.workSchedule.findFirst({
       where: {
-        id: parseInt(id),
+        id: scheduleId,
         deletedAt: null,
       },
       include: {
-        periods: {
-          include: {
-            timeRanges: true,
-          },
-        },
+        slots: true,
       },
     });
 
@@ -198,31 +158,54 @@ export const updateSchedule = async (req: Request, res: Response): Promise<void>
       throw new CustomError('Horaire non trouvé', 404);
     }
 
-    const schedule = await prisma.schedule.update({
-      where: { id: parseInt(id) },
+    await prisma.workScheduleSlot.deleteMany({
+      where: { scheduleId },
+    });
+
+    const schedule = await prisma.workSchedule.update({
+      where: { id: scheduleId },
       data: {
         label,
         abbreviation: abbreviation || null,
-        scheduleType,
-        dayOfWeek: dayOfWeek !== undefined ? parseInt(dayOfWeek) : null,
-        startTime: startTime || null, // Maintenant String (HH:MM)
-        endTime: endTime || null, // Maintenant String (HH:MM)
-        breakDuration: breakDuration ? parseInt(breakDuration) : null,
-        totalHours: totalHours ? parseFloat(totalHours) : null,
+        startTime,
+        endTime,
+        theoreticalDayHours:
+          theoreticalDayHours !== undefined && theoreticalDayHours !== null
+            ? parseFloat(theoreticalDayHours)
+            : null,
+        theoreticalMorningHours:
+          theoreticalMorningHours !== undefined && theoreticalMorningHours !== null
+            ? parseFloat(theoreticalMorningHours)
+            : null,
+        theoreticalAfternoonHours:
+          theoreticalAfternoonHours !== undefined && theoreticalAfternoonHours !== null
+            ? parseFloat(theoreticalAfternoonHours)
+            : null,
+        slots:
+          slots && Array.isArray(slots)
+            ? {
+                create: slots.map((slot: any) => ({
+                  slotType: slot.slotType,
+                  startTime: slot.startTime,
+                  endTime: slot.endTime,
+                  label: slot.label || null,
+                  multiplier:
+                    slot.multiplier !== undefined && slot.multiplier !== null
+                      ? parseFloat(slot.multiplier)
+                      : 1.0,
+                })),
+              }
+            : undefined,
       },
       include: {
-        periods: {
-          include: {
-            timeRanges: true,
-          },
-        },
+        slots: true,
       },
     });
 
     await createAuditLog({
       userId: req.user!.userId,
       action: 'UPDATE',
-      modelType: 'Schedule',
+      modelType: 'WorkSchedule',
       modelId: schedule.id,
       oldValue: oldSchedule,
       newValue: schedule,
@@ -243,7 +226,7 @@ export const deleteSchedule = async (req: Request, res: Response): Promise<void>
   try {
     const { id } = req.params;
 
-    const schedule = await prisma.schedule.findFirst({
+    const schedule = await prisma.workSchedule.findFirst({
       where: {
         id: parseInt(id),
         deletedAt: null,
@@ -254,7 +237,7 @@ export const deleteSchedule = async (req: Request, res: Response): Promise<void>
       throw new CustomError('Horaire non trouvé', 404);
     }
 
-    await prisma.schedule.update({
+    await prisma.workSchedule.update({
       where: { id: parseInt(id) },
       data: {
         deletedAt: new Date(),
@@ -264,7 +247,7 @@ export const deleteSchedule = async (req: Request, res: Response): Promise<void>
     await createAuditLog({
       userId: req.user!.userId,
       action: 'DELETE',
-      modelType: 'Schedule',
+      modelType: 'WorkSchedule',
       modelId: parseInt(id),
       oldValue: schedule,
       ipAddress: req.ip,
