@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import prisma from '../config/database';
 import { generateToken } from '../utils/jwt';
 import { CustomError } from '../middlewares/error.middleware';
+import { UserRole } from '@prisma/client';
 
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -25,7 +26,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       data: {
         email,
         password: hashedPassword,
-        role: 'USER',
+        role: UserRole.UTILISATEUR,
       },
       select: {
         id: true,

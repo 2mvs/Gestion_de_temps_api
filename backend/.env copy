@@ -1,0 +1,9 @@
+DATABASE_URL="mysql://root:@localhost:3306/my_project"
+JWT_SECRET="secret_jwt_dev_2025_gta_change_in_production_abc123xyz789"
+JWT_EXPIRES_IN="7d"
+CORS_ORIGIN="http://localhost:3000"
+PORT=8008
+NODE_ENV="development"
+
+
+#psql 'postgresql://default:ZhJM1BDlT8FH@ep-misty-dream-a4qh5li1-pooler.us-east-1.aws.neon.tech/gta?sslmode=require&channel_binding=require'
