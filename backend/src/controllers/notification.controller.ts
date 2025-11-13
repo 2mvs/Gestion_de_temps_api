@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
+import { NotificationType } from '@prisma/client';
 import prisma from '../config/database';
 import { CustomError } from '../middlewares/error.middleware';
+import { ADMIN_ROLES } from '../utils/roles';
 
 export const getAllNotifications = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -128,7 +130,7 @@ export const sendTestNotification = async (req: Request, res: Response): Promise
     const notification = await prisma.notification.create({
       data: {
         userId: userId ? parseInt(userId) : req.user!.userId,
-        type: type || 'INFO',
+        type: (type as NotificationType) || NotificationType.INFORMATION,
         title: title || 'Notification de test',
         message: message || 'Ceci est une notification de test',
       },
@@ -150,7 +152,9 @@ export const sendSystemAlert = async (req: Request, res: Response): Promise<void
     // Envoyer à tous les utilisateurs avec le rôle ADMIN
     const admins = await prisma.user.findMany({
       where: {
-        role: 'ADMIN',
+        role: {
+          in: ADMIN_ROLES,
+        },
       },
     });
 
@@ -159,7 +163,7 @@ export const sendSystemAlert = async (req: Request, res: Response): Promise<void
         prisma.notification.create({
           data: {
             userId: admin.id,
-            type: 'SYSTEM_ALERT',
+            type: NotificationType.ALERTE_SYSTEME,
             title: title || 'Alerte système',
             message: message || 'Alerte système importante',
           },

@@ -1,8 +1,10 @@
 import { Request, Response } from 'express';
+import { AbsenceType, ApprovalStatus } from '@prisma/client';
 import prisma from '../config/database';
 import { CustomError } from '../middlewares/error.middleware';
 import { createAuditLog } from '../utils/audit';
 import { managerHasAccessToEmployee } from '../utils/access';
+import { isAdminRole, isManagerRole } from '../utils/roles';
 
 const computeInclusiveDays = (start: Date, end: Date): number => {
   const startUTC = Date.UTC(start.getFullYear(), start.getMonth(), start.getDate());
@@ -19,7 +21,7 @@ export const getAllAbsences = async (req: Request, res: Response): Promise<void>
   try {
     const where: any = {};
 
-    if (req.user?.role === 'MANAGER') {
+    if (isManagerRole(req.user?.role)) {
       where.employee = {
         organizationalUnit: {
           managerId: req.user.userId,
@@ -65,7 +67,7 @@ export const getAbsencesByEmployee = async (req: Request, res: Response): Promis
       throw new CustomError('Identifiant employé invalide', 400);
     }
 
-    if (req.user?.role === 'MANAGER') {
+    if (isManagerRole(req.user?.role)) {
       const hasAccess = await managerHasAccessToEmployee(req.user.userId, parsedEmployeeId);
       if (!hasAccess) {
         throw new CustomError('Accès refusé', 403);
@@ -112,7 +114,7 @@ export const createAbsence = async (req: Request, res: Response): Promise<void> 
       throw new CustomError('Identifiant employé invalide', 400);
     }
 
-    if (req.user?.role === 'MANAGER') {
+    if (isManagerRole(req.user?.role)) {
       const hasAccess = await managerHasAccessToEmployee(req.user.userId, parsedEmployeeId);
       if (!hasAccess) {
         throw new CustomError('Accès refusé', 403);
@@ -122,12 +124,12 @@ export const createAbsence = async (req: Request, res: Response): Promise<void> 
     const absence = await prisma.absence.create({
       data: {
         employeeId: parsedEmployeeId,
-        absenceType: absenceType || 'VACATION',
+        absenceType: (absenceType as AbsenceType) || AbsenceType.CONGES,
         startDate: new Date(startDate),
         endDate: new Date(endDate),
         days: parseFloat(days),
         reason: reason || null,
-        status: 'PENDING',
+        status: ApprovalStatus.EN_ATTENTE,
       },
       include: {
         employee: true,
@@ -174,7 +176,7 @@ export const updateAbsence = async (req: Request, res: Response): Promise<void> 
       throw new CustomError('Absence non trouvée', 404);
     }
 
-    if (absence.status !== 'PENDING') {
+    if (absence.status !== ApprovalStatus.EN_ATTENTE) {
       throw new CustomError('Impossible de modifier une absence déjà approuvée ou rejetée', 400);
     }
 
@@ -183,7 +185,7 @@ export const updateAbsence = async (req: Request, res: Response): Promise<void> 
       absence.employee?.userId !== null && absence.employee?.userId !== undefined
         ? absence.employee.userId === requester.userId
         : false;
-    const hasManagerRights = requester.role === 'ADMIN' || requester.role === 'MANAGER';
+    const hasManagerRights = isAdminRole(requester.role) || isManagerRole(requester.role);
 
     if (!isOwner && !hasManagerRights) {
       throw new CustomError('Accès refusé', 403);
@@ -201,7 +203,7 @@ export const updateAbsence = async (req: Request, res: Response): Promise<void> 
       targetEmployeeId = parsedEmployeeId;
     }
 
-    if (requester.role === 'MANAGER') {
+    if (isManagerRole(requester.role)) {
       const hasAccessCurrent = await managerHasAccessToEmployee(requester.userId, absence.employeeId);
       if (!hasAccessCurrent) {
         throw new CustomError('Accès refusé', 403);
@@ -237,7 +239,7 @@ export const updateAbsence = async (req: Request, res: Response): Promise<void> 
       where: { id: absence.id },
       data: {
         employeeId: targetEmployeeId,
-        absenceType: absenceType || absence.absenceType,
+        absenceType: absenceType ? (absenceType as AbsenceType) : absence.absenceType,
         startDate: newStart,
         endDate: newEnd,
         days: updatedDays,
@@ -286,7 +288,7 @@ export const approveAbsence = async (req: Request, res: Response): Promise<void>
     const { id } = req.params;
     const { status, approvedBy } = req.body;
 
-    if (!['APPROVED', 'REJECTED'].includes(status)) {
+    if (!Object.values(ApprovalStatus).includes(status as ApprovalStatus)) {
       throw new CustomError('Statut invalide', 400);
     }
 
@@ -298,7 +300,7 @@ export const approveAbsence = async (req: Request, res: Response): Promise<void>
       throw new CustomError('Absence non trouvée', 404);
     }
 
-    if (req.user?.role === 'MANAGER') {
+    if (isManagerRole(req.user?.role)) {
       const hasAccess = await managerHasAccessToEmployee(req.user.userId, oldAbsence.employeeId);
       if (!hasAccess) {
         throw new CustomError('Accès refusé', 403);
@@ -308,7 +310,7 @@ export const approveAbsence = async (req: Request, res: Response): Promise<void>
     const absence = await prisma.absence.update({
       where: { id: parseInt(id) },
       data: {
-        status,
+        status: status as ApprovalStatus,
         approvedBy: approvedBy ? parseInt(approvedBy) : req.user!.userId,
         approvedAt: new Date(),
       },
@@ -320,7 +322,7 @@ export const approveAbsence = async (req: Request, res: Response): Promise<void>
 
     await createAuditLog({
       userId: req.user!.userId,
-      action: status === 'APPROVED' ? 'APPROVE' : 'REJECT',
+      action: status === ApprovalStatus.APPROUVE ? 'APPROVE' : 'REJECT',
       modelType: 'Absence',
       modelId: absence.id,
       oldValue: oldAbsence,
@@ -330,7 +332,7 @@ export const approveAbsence = async (req: Request, res: Response): Promise<void>
     });
 
     res.json({
-      message: `Absence ${status === 'APPROVED' ? 'approuvée' : 'rejetée'} avec succès`,
+      message: `Absence ${status === ApprovalStatus.APPROUVE ? 'approuvée' : 'rejetée'} avec succès`,
       data: absence,
     });
   } catch (error) {

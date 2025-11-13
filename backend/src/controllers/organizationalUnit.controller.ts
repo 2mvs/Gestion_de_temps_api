@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import prisma from '../config/database';
 import { CustomError } from '../middlewares/error.middleware';
 import { createAuditLog } from '../utils/audit';
+import { isAdminRole, isManagerRole } from '../utils/roles';
 
 export const getAllOrganizationalUnits = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -207,7 +208,7 @@ export const getOrganizationalUnitChildren = async (req: Request, res: Response)
 
 export const createOrganizationalUnit = async (req: Request, res: Response): Promise<void> => {
   try {
-    if (req.user?.role !== 'ADMIN') {
+    if (!isAdminRole(req.user?.role)) {
       throw new CustomError('Accès refusé', 403);
     }
 
@@ -223,8 +224,8 @@ export const createOrganizationalUnit = async (req: Request, res: Response): Pro
         where: { id: parsedManagerId },
         select: { id: true, role: true },
       });
-      if (!managerUser || managerUser.role !== 'MANAGER') {
-        throw new CustomError('Le manager sélectionné doit avoir le rôle MANAGER', 400);
+      if (!managerUser || !isManagerRole(managerUser.role)) {
+        throw new CustomError('Le manager sélectionné doit avoir le rôle GESTIONNAIRE', 400);
       }
       managerUserId = managerUser.id;
     }
@@ -271,7 +272,7 @@ export const createOrganizationalUnit = async (req: Request, res: Response): Pro
 
 export const updateOrganizationalUnit = async (req: Request, res: Response): Promise<void> => {
   try {
-    if (req.user?.role !== 'ADMIN') {
+    if (!isAdminRole(req.user?.role)) {
       throw new CustomError('Accès refusé', 403);
     }
 
@@ -302,8 +303,8 @@ export const updateOrganizationalUnit = async (req: Request, res: Response): Pro
           where: { id: parsedManagerId },
           select: { id: true, role: true },
         });
-        if (!managerUser || managerUser.role !== 'MANAGER') {
-          throw new CustomError('Le manager sélectionné doit avoir le rôle MANAGER', 400);
+        if (!managerUser || !isManagerRole(managerUser.role)) {
+          throw new CustomError('Le manager sélectionné doit avoir le rôle GESTIONNAIRE', 400);
         }
         managerUserId = managerUser.id;
       }
@@ -353,7 +354,7 @@ export const updateOrganizationalUnit = async (req: Request, res: Response): Pro
 
 export const deleteOrganizationalUnit = async (req: Request, res: Response): Promise<void> => {
   try {
-    if (req.user?.role !== 'ADMIN') {
+    if (!isAdminRole(req.user?.role)) {
       throw new CustomError('Accès refusé', 403);
     }
 

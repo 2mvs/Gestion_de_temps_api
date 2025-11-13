@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { TimeEntryStatus } from '@prisma/client';
 import prisma from '../config/database';
 import { CustomError } from '../middlewares/error.middleware';
 import { createAuditLog } from '../utils/audit';
@@ -7,6 +8,25 @@ import {
   calculateHoursWorked,
   autoCreateOvertimeAndSpecialHours,
 } from '../utils/overtimeCalculator';
+import { isManagerRole } from '../utils/roles';
+
+const mapTimeEntryStatus = (value: string): TimeEntryStatus => {
+  const normalized = value.toString().toUpperCase();
+  const mapping: Record<string, TimeEntryStatus> = {
+    EN_ATTENTE: TimeEntryStatus.EN_ATTENTE,
+    PENDING: TimeEntryStatus.EN_ATTENTE,
+    TERMINE: TimeEntryStatus.TERMINE,
+    COMPLETED: TimeEntryStatus.TERMINE,
+    INCOMPLET: TimeEntryStatus.INCOMPLET,
+    INCOMPLETE: TimeEntryStatus.INCOMPLET,
+    ABSENT: TimeEntryStatus.ABSENT,
+  };
+  const mapped = mapping[normalized];
+  if (!mapped) {
+    throw new CustomError('Statut invalide', 400);
+  }
+  return mapped;
+};
 
 export const getTimeEntriesByEmployee = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -18,7 +38,7 @@ export const getTimeEntriesByEmployee = async (req: Request, res: Response): Pro
       throw new CustomError('Identifiant employé invalide', 400);
     }
 
-    if (req.user?.role === 'MANAGER') {
+    if (isManagerRole(req.user?.role)) {
       const hasAccess = await managerHasAccessToEmployee(req.user.userId, parsedEmployeeId);
       if (!hasAccess) {
         throw new CustomError('Accès refusé', 403);
@@ -69,7 +89,7 @@ export const clockIn = async (req: Request, res: Response): Promise<void> => {
       throw new CustomError('Identifiant employé invalide', 400);
     }
 
-    if (req.user?.role === 'MANAGER') {
+    if (isManagerRole(req.user?.role)) {
       const hasAccess = await managerHasAccessToEmployee(req.user.userId, parsedEmployeeId);
       if (!hasAccess) {
         throw new CustomError('Accès refusé', 403);
@@ -127,7 +147,7 @@ export const clockIn = async (req: Request, res: Response): Promise<void> => {
           clockIn: now,
           isValidated: false,
           validatedAt: null,
-          status: 'PENDING',
+          status: TimeEntryStatus.EN_ATTENTE,
         },
       });
     }
@@ -161,7 +181,7 @@ export const clockOut = async (req: Request, res: Response): Promise<void> => {
       throw new CustomError('Identifiant employé invalide', 400);
     }
 
-    if (req.user?.role === 'MANAGER') {
+    if (isManagerRole(req.user?.role)) {
       const hasAccess = await managerHasAccessToEmployee(req.user.userId, parsedEmployeeId);
       if (!hasAccess) {
         throw new CustomError('Accès refusé', 403);
@@ -210,7 +230,7 @@ export const clockOut = async (req: Request, res: Response): Promise<void> => {
       data: {
         clockOut: now,
         totalHours: Math.round(totalHours * 100) / 100,
-        status: 'COMPLETED',
+        status: TimeEntryStatus.TERMINE,
         isValidated: false,
         validatedAt: null,
       },
@@ -288,14 +308,14 @@ export const updateTimeEntry = async (req: Request, res: Response): Promise<void
       throw new CustomError('Pointage introuvable', 404);
     }
 
-    if (req.user?.role === 'MANAGER') {
+    if (isManagerRole(req.user?.role)) {
       const hasAccess = await managerHasAccessToEmployee(req.user.userId, timeEntry.employeeId);
       if (!hasAccess) {
         throw new CustomError('Accès refusé', 403);
       }
     }
 
-    if (req.user?.role === 'MANAGER') {
+    if (isManagerRole(req.user?.role)) {
       const hasAccess = await managerHasAccessToEmployee(req.user.userId, timeEntry.employeeId);
       if (!hasAccess) {
         throw new CustomError('Accès refusé', 403);
@@ -342,15 +362,11 @@ export const updateTimeEntry = async (req: Request, res: Response): Promise<void
     }
 
     if (status) {
-      const allowedStatuses = ['PENDING', 'COMPLETED', 'INCOMPLETE', 'ABSENT'];
-      if (!allowedStatuses.includes(status)) {
-        throw new CustomError('Statut invalide', 400);
-      }
-      updates.status = status;
+      updates.status = mapTimeEntryStatus(status);
     } else if (updates.clockIn && updates.clockOut) {
-      updates.status = 'COMPLETED';
+      updates.status = TimeEntryStatus.TERMINE;
     } else if (updates.clockIn || updates.clockOut) {
-      updates.status = 'INCOMPLETE';
+      updates.status = TimeEntryStatus.INCOMPLET;
     }
 
     updates.updatedAt = new Date();
@@ -427,7 +443,7 @@ export const getBalance = async (req: Request, res: Response): Promise<void> => 
       throw new CustomError('Identifiant employé invalide', 400);
     }
 
-    if (req.user?.role === 'MANAGER') {
+    if (isManagerRole(req.user?.role)) {
       const hasAccess = await managerHasAccessToEmployee(req.user.userId, parsedEmployeeId);
       if (!hasAccess) {
         throw new CustomError('Accès refusé', 403);
@@ -445,7 +461,7 @@ export const getBalance = async (req: Request, res: Response): Promise<void> => 
           gte: new Date(startDate as string),
           lte: new Date(endDate as string),
         },
-        status: 'COMPLETED',
+        status: TimeEntryStatus.TERMINE,
       },
     });
 
@@ -510,7 +526,7 @@ export const validateTimeEntry = async (req: Request, res: Response): Promise<vo
       throw new CustomError('Pointage non trouvé', 404);
     }
 
-    if (req.user?.role === 'MANAGER') {
+    if (isManagerRole(req.user?.role)) {
       const hasAccess = await managerHasAccessToEmployee(req.user.userId, timeEntry.employeeId);
       if (!hasAccess) {
         throw new CustomError('Accès refusé', 403);
@@ -571,7 +587,7 @@ export const validatePeriod = async (req: Request, res: Response): Promise<void>
       throw new CustomError('Identifiant employé invalide', 400);
     }
 
-    if (req.user?.role === 'MANAGER') {
+    if (isManagerRole(req.user?.role)) {
       const hasAccess = await managerHasAccessToEmployee(req.user.userId, parsedEmployeeId);
       if (!hasAccess) {
         throw new CustomError('Accès refusé', 403);
@@ -736,7 +752,7 @@ export const getValidationStats = async (req: Request, res: Response): Promise<v
       throw new CustomError('Identifiant employé invalide', 400);
     }
 
-    if (req.user?.role === 'MANAGER') {
+    if (isManagerRole(req.user?.role)) {
       const hasAccess = await managerHasAccessToEmployee(req.user.userId, parsedEmployeeId);
       if (!hasAccess) {
         throw new CustomError('Accès refusé', 403);

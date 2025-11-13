@@ -40,7 +40,7 @@ const linkAccountValidation = [
     .withMessage('Le mot de passe doit contenir au moins 6 caractères'),
   body('role')
     .optional()
-    .isIn(['ADMIN', 'MANAGER', 'USER'])
+    .isIn(['ADMINISTRATEUR', 'GESTIONNAIRE', 'UTILISATEUR', 'ADMIN', 'MANAGER', 'USER', 'MANGER'])
     .withMessage('Rôle utilisateur invalide'),
 ];
 
@@ -48,11 +48,11 @@ const linkAccountValidation = [
 router.get('/', getAllEmployees);
 router.get('/:id/payslip', getEmployeePayslip);
 router.get('/:id', getEmployeeById);
-router.post('/', authorize('ADMIN'), validate(createValidation), createEmployee);
-router.put('/:id', authorize('ADMIN'), validate(updateValidation), updateEmployee);
-router.delete('/:id', authorize('ADMIN'), deleteEmployee);
-router.post('/bulk', authorize('ADMIN'), bulkImportEmployees);
-router.post('/:id/link-account', authorize('ADMIN'), validate(linkAccountValidation), linkEmployeeAccount);
+router.post('/', authorize('ADMINISTRATEUR'), validate(createValidation), createEmployee);
+router.put('/:id', authorize('ADMINISTRATEUR'), validate(updateValidation), updateEmployee);
+router.delete('/:id', authorize('ADMINISTRATEUR'), deleteEmployee);
+router.post('/bulk', authorize('ADMINISTRATEUR'), bulkImportEmployees);
+router.post('/:id/link-account', authorize('ADMINISTRATEUR'), validate(linkAccountValidation), linkEmployeeAccount);
 
 export default router;
 

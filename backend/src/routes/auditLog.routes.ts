@@ -9,7 +9,7 @@ import { authenticate, authorize } from '../middlewares/auth.middleware';
 const router = Router();
 
 router.use(authenticate);
-router.use(authorize('ADMIN', 'MANAGER'));
+router.use(authorize('ADMINISTRATEUR', 'GESTIONNAIRE'));
 
 router.get('/', getAllAuditLogs);
 router.get('/model/:modelType/:modelId', getAuditLogsByModel);

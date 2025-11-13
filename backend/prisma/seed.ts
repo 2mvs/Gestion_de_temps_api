@@ -1,4 +1,15 @@
-import { PrismaClient } from '@prisma/client';
+import {
+  PrismaClient,
+  UserRole,
+  ScheduleSlotType,
+  Gender,
+  ContractType,
+  EmployeeStatus,
+  TimeEntryStatus,
+  AbsenceType,
+  ApprovalStatus,
+  NotificationType,
+} from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
@@ -15,7 +26,7 @@ async function main() {
     create: {
       email: 'admin@gta.com',
       password: hashedPassword,
-      role: 'ADMIN',
+      role: UserRole.ADMINISTRATEUR,
     },
   });
 
@@ -72,21 +83,21 @@ async function main() {
       slots: {
         create: [
           {
-            slotType: 'BREAK',
+            slotType: ScheduleSlotType.PAUSE,
             startTime: '12:00',
             endTime: '13:00',
             label: 'Pause déjeuner',
             multiplier: 1.0,
           },
           {
-            slotType: 'OVERTIME',
+            slotType: ScheduleSlotType.HEURE_SUPPLEMENTAIRE,
             startTime: '17:00',
             endTime: '20:00',
             label: 'Heures supplémentaires soir',
             multiplier: 1.50,
           },
           {
-            slotType: 'SPECIAL',
+            slotType: ScheduleSlotType.HEURE_SPECIALE,
             startTime: '05:00',
             endTime: '06:00',
             label: 'Heures de nuit',
@@ -109,21 +120,21 @@ async function main() {
       slots: {
         create: [
           {
-            slotType: 'BREAK',
+            slotType: ScheduleSlotType.PAUSE,
             startTime: '12:30',
             endTime: '13:00',
             label: 'Pause midi',
             multiplier: 1.0,
           },
           {
-            slotType: 'ENTRY_GRACE',
+            slotType: ScheduleSlotType.FRANCHISE_ENTREE,
             startTime: '08:45',
             endTime: '09:15',
             label: 'Franchise d\'entrée',
             multiplier: 1.0,
           },
           {
-            slotType: 'SPECIAL',
+            slotType: ScheduleSlotType.HEURE_SPECIALE,
             startTime: '16:00',
             endTime: '18:00',
             label: 'Heures spéciales soir',
@@ -163,10 +174,10 @@ async function main() {
       lastName: 'Dupont',
       email: 'jean.dupont@gta.com',
       phone: '0612345678',
-      gender: 'MALE',
+      gender: Gender.HOMME,
       hireDate: new Date('2020-01-15'),
-      contractType: 'FULL_TIME',
-      status: 'ACTIVE',
+      contractType: ContractType.TEMPS_PLEIN,
+      status: EmployeeStatus.ACTIF,
       organizationalUnitId: dsi.id,
       workCycleId: cycle40h.id,
     },
@@ -179,10 +190,10 @@ async function main() {
       lastName: 'Martin',
       email: 'marie.martin@gta.com',
       phone: '0623456789',
-      gender: 'FEMALE',
+      gender: Gender.FEMME,
       hireDate: new Date('2021-03-20'),
-      contractType: 'FULL_TIME',
-      status: 'ACTIVE',
+      contractType: ContractType.TEMPS_PLEIN,
+      status: EmployeeStatus.ACTIF,
       organizationalUnitId: drh.id,
       workCycleId: cycle35h.id,
     },
@@ -195,10 +206,10 @@ async function main() {
       lastName: 'Bernard',
       email: 'pierre.bernard@gta.com',
       phone: '0634567890',
-      gender: 'MALE',
+      gender: Gender.HOMME,
       hireDate: new Date('2022-06-01'),
-      contractType: 'FULL_TIME',
-      status: 'ACTIVE',
+      contractType: ContractType.TEMPS_PLEIN,
+      status: EmployeeStatus.ACTIF,
       organizationalUnitId: dsi.id,
       workCycleId: cycle40h.id,
     },
@@ -223,7 +234,7 @@ async function main() {
       clockIn: clockInTime1,
       clockOut: clockOutTime1,
       totalHours: 8.75,
-      status: 'COMPLETED',
+      status: TimeEntryStatus.TERMINE,
     },
   });
 
@@ -233,12 +244,12 @@ async function main() {
   await prisma.absence.create({
     data: {
       employeeId: employee2.id,
-      absenceType: 'VACATION',
+      absenceType: AbsenceType.CONGES,
       startDate: new Date('2025-12-24'),
       endDate: new Date('2025-12-31'),
       days: 6,
       reason: 'Congés de fin d\'année',
-      status: 'PENDING',
+      status: ApprovalStatus.EN_ATTENTE,
     },
   });
 
@@ -248,7 +259,7 @@ async function main() {
   await prisma.notification.create({
     data: {
       userId: admin.id,
-      type: 'INFO',
+      type: NotificationType.INFORMATION,
       title: 'Bienvenue sur GTA',
       message: 'Votre système de gestion des temps et activités est prêt !',
       isRead: false,

@@ -4,8 +4,9 @@ import {
   getOvertimesByEmployee,
   createOvertime,
   approveOvertime,
+  getAllOvertimes,
 } from '../controllers/overtime.controller';
-import { authenticate } from '../middlewares/auth.middleware';
+import { authenticate, authorize } from '../middlewares/auth.middleware';
 import { validate } from '../middlewares/validation.middleware';
 
 const router = Router();
@@ -18,6 +19,7 @@ const createValidation = [
   body('hours').isFloat({ min: 0.5 }).withMessage('Le nombre d\'heures doit être au moins 0.5'),
 ];
 
+router.get('/', authorize('ADMINISTRATEUR'), getAllOvertimes);
 router.get('/employee/:employeeId', getOvertimesByEmployee);
 router.post('/', validate(createValidation), createOvertime);
 router.patch('/:id/approve', approveOvertime);

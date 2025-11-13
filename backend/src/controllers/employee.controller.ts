@@ -1,10 +1,12 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
-import { UserRole } from '@prisma/client';
+import { ApprovalStatus, TimeEntryStatus, UserRole } from '@prisma/client';
 import prisma from '../config/database';
 import { CustomError } from '../middlewares/error.middleware';
 import { createAuditLog } from '../utils/audit';
 import { managerHasAccessToEmployee, managerHasAccessToUnit } from '../utils/access';
+import { isManagerRole } from '../utils/roles';
+import { calculateHoursWorked } from '../utils/overtimeCalculator';
 
 export const getEmployeePayslip = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -38,7 +40,7 @@ export const getEmployeePayslip = async (req: Request, res: Response): Promise<v
       throw new CustomError('Employé non trouvé', 404);
     }
 
-    if (req.user?.role === 'MANAGER') {
+    if (isManagerRole(req.user?.role)) {
       const hasAccess = await managerHasAccessToEmployee(req.user.userId, employee.id);
       if (!hasAccess) {
         throw new CustomError('Accès refusé', 403);
@@ -56,7 +58,7 @@ export const getEmployeePayslip = async (req: Request, res: Response): Promise<v
           gte: start,
           lte: end,
         },
-        status: 'COMPLETED',
+        status: TimeEntryStatus.TERMINE,
       },
       orderBy: {
         date: 'asc',
@@ -71,7 +73,7 @@ export const getEmployeePayslip = async (req: Request, res: Response): Promise<v
           gte: start,
           lte: end,
         },
-        status: 'APPROVED',
+        status: ApprovalStatus.APPROUVE,
       },
     });
 
@@ -83,7 +85,7 @@ export const getEmployeePayslip = async (req: Request, res: Response): Promise<v
           gte: start,
           lte: end,
         },
-        status: 'APPROVED',
+        status: ApprovalStatus.APPROUVE,
       },
     });
 
@@ -97,14 +99,54 @@ export const getEmployeePayslip = async (req: Request, res: Response): Promise<v
         endDate: {
           gte: start,
         },
-        status: 'APPROVED',
+        status: ApprovalStatus.APPROUVE,
       },
     });
 
-    // Calculer les totaux
-    const totalHours = timeEntries.reduce((sum, entry) => sum + (entry.totalHours || 0), 0);
-    const totalOvertimeHours = overtimes.reduce((sum, ot) => sum + (ot.hours || 0), 0);
-    const totalSpecialHours = specialHours.reduce((sum, sh) => sum + (sh.hours || 0), 0);
+    // Calculer les totaux via le moteur de calcul
+    let totalNormalHours = 0;
+    let totalCalculatedOvertime = 0;
+    let totalCalculatedSpecial = 0;
+
+    const enrichedTimeEntries = await Promise.all(
+      timeEntries.map(async (entry) => {
+        if (!entry.clockIn || !entry.clockOut) {
+          return {
+            ...entry,
+            calculatedHours: null,
+          };
+        }
+
+        const calculated = await calculateHoursWorked({
+          employeeId: employee.id,
+          clockInTime: entry.clockIn,
+          clockOutTime: entry.clockOut,
+          date: entry.date,
+        });
+
+        totalNormalHours += calculated.normalHours;
+        totalCalculatedOvertime += calculated.overtimeHours;
+        totalCalculatedSpecial += calculated.specialHours;
+
+        return {
+          ...entry,
+          calculatedHours: calculated,
+        };
+      })
+    );
+
+    // Tenir compte des enregistrements approuvés (manuels ou automatiques)
+    const approvedOvertimeHours = overtimes.reduce((sum, ot) => sum + (ot.hours || 0), 0);
+    const approvedSpecialHours = specialHours.reduce((sum, sh) => sum + (sh.hours || 0), 0);
+
+    const totalBreakHours = enrichedTimeEntries.reduce(
+      (sum, entry) => sum + (entry.calculatedHours?.breakdown.other || 0),
+      0
+    );
+
+    const totalHours = totalNormalHours;
+    const totalOvertimeHours = Math.max(totalCalculatedOvertime, approvedOvertimeHours);
+    const totalSpecialHours = Math.max(totalCalculatedSpecial, approvedSpecialHours);
     const totalAbsenceDays = absences.reduce((sum, abs) => sum + (abs.days || 0), 0);
 
     res.json({
@@ -128,10 +170,11 @@ export const getEmployeePayslip = async (req: Request, res: Response): Promise<v
           totalHours: Math.round(totalHours * 100) / 100,
           totalOvertimeHours: Math.round(totalOvertimeHours * 100) / 100,
           totalSpecialHours: Math.round(totalSpecialHours * 100) / 100,
+          totalBreakHours: Math.round(totalBreakHours * 100) / 100,
           totalAbsenceDays,
           workDays: timeEntries.length,
         },
-        timeEntries,
+        timeEntries: enrichedTimeEntries,
         overtimes,
         specialHours,
         absences,
@@ -148,7 +191,7 @@ export const getAllEmployees = async (req: Request, res: Response): Promise<void
       deletedAt: null,
     };
 
-    if (req.user?.role === 'MANAGER') {
+    if (isManagerRole(req.user?.role)) {
       where.organizationalUnit = {
         managerId: req.user.userId,
       };
@@ -240,7 +283,7 @@ export const getEmployeeById = async (req: Request, res: Response): Promise<void
       throw new CustomError('Employé non trouvé', 404);
     }
 
-    if (req.user?.role === 'MANAGER') {
+    if (isManagerRole(req.user?.role)) {
       const hasAccess = await managerHasAccessToEmployee(req.user.userId, employee.id);
       if (!hasAccess) {
         throw new CustomError('Accès refusé', 403);
@@ -269,7 +312,7 @@ export const createEmployee = async (req: Request, res: Response): Promise<void>
       workCycleId,
     } = req.body;
 
-    if (req.user?.role === 'MANAGER') {
+    if (isManagerRole(req.user?.role)) {
       if (!organizationalUnitId) {
         throw new CustomError('Vous devez sélectionner une unité organisationnelle', 403);
       }
@@ -351,7 +394,7 @@ export const updateEmployee = async (req: Request, res: Response): Promise<void>
       throw new CustomError('Employé non trouvé', 404);
     }
 
-    if (req.user?.role === 'MANAGER') {
+    if (isManagerRole(req.user?.role)) {
       const hasAccess = await managerHasAccessToEmployee(req.user.userId, oldEmployee.id);
       if (!hasAccess) {
         throw new CustomError('Accès refusé', 403);
@@ -421,7 +464,7 @@ export const deleteEmployee = async (req: Request, res: Response): Promise<void>
       throw new CustomError('Employé non trouvé', 404);
     }
 
-    if (req.user?.role === 'MANAGER') {
+    if (isManagerRole(req.user?.role)) {
       const hasAccess = await managerHasAccessToEmployee(req.user.userId, employee.id);
       if (!hasAccess) {
         throw new CustomError('Accès refusé', 403);

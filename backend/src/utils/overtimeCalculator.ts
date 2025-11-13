@@ -1,3 +1,4 @@
+import { ApprovalStatus, SpecialHourType } from '@prisma/client';
 import prisma from '../config/database';
 
 interface TimeEntryData {
@@ -62,6 +63,26 @@ function isHoliday(date: Date): boolean {
 /**
  * Calcule les heures travaillées en décomposant par plages horaires
  */
+const normalizeSlotTypeName = (slotType?: string | null): string => {
+  const value = (slotType || '').toString().toUpperCase();
+  switch (value) {
+    case 'FRANCHISE_ENTREE':
+    case 'ENTRY_GRACE':
+      return 'FRANCHISE_ENTREE';
+    case 'PAUSE':
+    case 'BREAK':
+      return 'PAUSE';
+    case 'HEURE_SUPPLEMENTAIRE':
+    case 'OVERTIME':
+      return 'HEURE_SUPPLEMENTAIRE';
+    case 'HEURE_SPECIALE':
+    case 'SPECIAL':
+      return 'HEURE_SPECIALE';
+    default:
+      return value || 'PAUSE';
+  }
+};
+
 export async function calculateHoursWorked(
   timeEntry: TimeEntryData
 ): Promise<CalculatedHours> {
@@ -128,8 +149,15 @@ export async function calculateHoursWorked(
 
   const slots = schedule.slots || [];
 
-  let normalMinutes = totalMinutesWorked;
-  let overtimeMinutes = 0;
+  const withinStart = Math.max(clockInMinutes, scheduledStart);
+  const withinEnd = Math.min(clockOutMinutes, scheduledEnd);
+  const minutesWithinSchedule = Math.max(0, withinEnd - withinStart);
+
+  const minutesBeforeSchedule = Math.max(0, Math.min(scheduledStart, clockOutMinutes) - clockInMinutes);
+  const minutesAfterSchedule = Math.max(0, clockOutMinutes - Math.max(scheduledEnd, clockInMinutes));
+
+  let normalMinutes = minutesWithinSchedule;
+  let overtimeMinutes = minutesBeforeSchedule + minutesAfterSchedule;
   let specialMinutes = 0;
   let breakMinutes = 0;
 
@@ -141,21 +169,9 @@ export async function calculateHoursWorked(
     multiplier: number;
   }> = [];
 
-  // Heures supplémentaires avant l'horaire prévu
-  if (clockInMinutes < scheduledStart) {
-    const minutes = Math.min(scheduledStart - clockInMinutes, totalMinutesWorked);
-    overtimeMinutes += Math.max(minutes, 0);
-    normalMinutes -= Math.max(minutes, 0);
-  }
-
-  // Heures supplémentaires après l'horaire prévu
-  if (clockOutMinutes > scheduledEnd) {
-    const minutes = clockOutMinutes - Math.max(scheduledEnd, clockInMinutes);
-    overtimeMinutes += Math.max(minutes, 0);
-    normalMinutes -= Math.max(minutes, 0);
-  }
-
   for (const slot of slots) {
+    const normalizedSlotType = normalizeSlotTypeName(slot.slotType);
+
     let slotStart = timeToMinutes(slot.startTime);
     let slotEnd = timeToMinutes(slot.endTime);
     if (slotEnd <= slotStart) {
@@ -168,13 +184,13 @@ export async function calculateHoursWorked(
     if (overlapStart < overlapEnd) {
       const minutes = overlapEnd - overlapStart;
       const hours = minutesToHours(minutes);
-      const slotLabel = slot.label || slot.slotType;
+      const slotLabel = slot.label || normalizedSlotType;
       const slotMultiplier =
         slot.multiplier !== undefined && slot.multiplier !== null
           ? slot.multiplier
-          : slot.slotType === 'OVERTIME'
+          : normalizedSlotType === 'HEURE_SUPPLEMENTAIRE'
           ? 1.25
-          : slot.slotType === 'SPECIAL'
+          : normalizedSlotType === 'HEURE_SPECIALE'
           ? 1.5
           : 1.0;
 
@@ -183,24 +199,49 @@ export async function calculateHoursWorked(
         end: `${Math.floor(overlapEnd / 60)}:${String(overlapEnd % 60).padStart(2, '0')}`,
         hours,
         label: slotLabel,
-        type: slot.slotType,
+        type: normalizedSlotType,
         multiplier: slotMultiplier,
       });
 
-      switch (slot.slotType) {
-        case 'BREAK':
+      const minutesWithinSlotSchedule = Math.max(
+        0,
+        Math.min(overlapEnd, scheduledEnd) - Math.max(overlapStart, scheduledStart)
+      );
+      const minutesOutsideSlotSchedule = minutes - minutesWithinSlotSchedule;
+
+      switch (normalizedSlotType) {
+        case 'PAUSE': {
           breakMinutes += minutes;
-          normalMinutes -= minutes;
+          if (minutesWithinSlotSchedule > 0) {
+            normalMinutes = Math.max(normalMinutes - minutesWithinSlotSchedule, 0);
+          }
+          if (minutesOutsideSlotSchedule > 0) {
+            overtimeMinutes = Math.max(overtimeMinutes - minutesOutsideSlotSchedule, 0);
+          }
           break;
-        case 'OVERTIME':
-          overtimeMinutes += minutes;
-          normalMinutes -= minutes;
+        }
+        case 'HEURE_SUPPLEMENTAIRE': {
+          if (minutesWithinSlotSchedule > 0) {
+            const transferable = Math.min(minutesWithinSlotSchedule, normalMinutes);
+            normalMinutes -= transferable;
+            overtimeMinutes += transferable;
+          }
+          // Les minutes hors horaire sont déjà comptées comme heures sup
           break;
-        case 'SPECIAL':
+        }
+        case 'HEURE_SPECIALE': {
+          if (minutesWithinSlotSchedule > 0) {
+            const transferable = Math.min(minutesWithinSlotSchedule, normalMinutes);
+            normalMinutes -= transferable;
+          }
+          if (minutesOutsideSlotSchedule > 0) {
+            const transferable = Math.min(minutesOutsideSlotSchedule, overtimeMinutes);
+            overtimeMinutes -= transferable;
+          }
           specialMinutes += minutes;
-          normalMinutes -= minutes;
           break;
-        case 'ENTRY_GRACE':
+        }
+        case 'FRANCHISE_ENTREE':
         default:
           // compté comme normal
           break;
@@ -272,7 +313,7 @@ export async function autoCreateOvertimeAndSpecialHours(
           date: new Date(date),
           hours: Math.round(overtimeHours * 100) / 100,
           reason: `Calcul automatique basé sur l'horaire (${breakdown.overtime.toFixed(2)}h sup + ${breakdown.nightShift.toFixed(2)}h nuit)`,
-          status: 'PENDING',
+          status: ApprovalStatus.EN_ATTENTE,
         },
       });
     }
@@ -298,12 +339,12 @@ export async function autoCreateOvertimeAndSpecialHours(
     if (!existingSpecial) {
       const hourType =
         breakdown.sunday > 0
-          ? 'WEEKEND'
+          ? SpecialHourType.WEEKEND
           : breakdown.holiday > 0
-          ? 'HOLIDAY'
+          ? SpecialHourType.FERIE
           : breakdown.nightShift > 0
-          ? 'NIGHT_SHIFT'
-          : 'ON_CALL';
+          ? SpecialHourType.NUIT
+          : SpecialHourType.ASTREINTE;
 
       await prisma.specialHour.create({
         data: {
@@ -312,7 +353,7 @@ export async function autoCreateOvertimeAndSpecialHours(
           hours: Math.round(specialHours * 100) / 100,
           hourType,
           reason: `Calcul automatique: ${breakdown.sunday > 0 ? `${breakdown.sunday.toFixed(2)}h dimanche` : ''} ${breakdown.holiday > 0 ? `${breakdown.holiday.toFixed(2)}h férié` : ''} ${breakdown.other > 0 ? `${breakdown.other.toFixed(2)}h autres` : ''}`,
-          status: 'PENDING',
+          status: ApprovalStatus.EN_ATTENTE,
         },
       });
     }

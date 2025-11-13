@@ -18,7 +18,7 @@ model User {
   id        Int      @id @default(autoincrement())
   email     String   @unique
   password  String @db.VarChar(255)
-  role      UserRole @default(USER)
+  role      UserRole @default(UTILISATEUR)
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -34,9 +34,9 @@ model User {
 }
 
 enum UserRole {
-  ADMIN
-  MANAGER
-  USER
+  ADMINISTRATEUR @map("ADMIN")
+  GESTIONNAIRE   @map("MANAGER")
+  UTILISATEUR    @map("USER")
 }
 
 // ============================================
@@ -50,10 +50,10 @@ model Employee {
   lastName       String
   email          String?
   phone          String?
-  gender         Gender    @default(UNKNOWN)
+  gender         Gender    @default(INCONNU)
   hireDate       DateTime
-  contractType   ContractType @default(FULL_TIME)
-  status         EmployeeStatus @default(ACTIVE)
+  contractType   ContractType @default(TEMPS_PLEIN)
+  status         EmployeeStatus @default(ACTIF)
   
   // Relations
   userId               Int?                  @unique
@@ -77,23 +77,23 @@ model Employee {
 }
 
 enum Gender {
-  MALE
-  FEMALE
-  UNKNOWN
+  HOMME    @map("MALE")
+  FEMME    @map("FEMALE")
+  INCONNU  @map("UNKNOWN")
 }
 
 enum ContractType {
-  FULL_TIME
-  PART_TIME
+  TEMPS_PLEIN    @map("FULL_TIME")
+  TEMPS_PARTIEL  @map("PART_TIME")
   INTERIM
-  CONTRACT
+  CONTRAT        @map("CONTRACT")
 }
 
 enum EmployeeStatus {
-  ACTIVE
-  INACTIVE
-  SUSPENDED
-  TERMINATED
+  ACTIF      @map("ACTIVE")
+  INACTIF    @map("INACTIVE")
+  SUSPENDU   @map("SUSPENDED")
+  RESILIE    @map("TERMINATED")
 }
 
 model OrganizationalUnit {
@@ -161,10 +161,10 @@ model WorkScheduleSlot {
 }
 
 enum ScheduleSlotType {
-  ENTRY_GRACE
-  BREAK
-  OVERTIME
-  SPECIAL
+  FRANCHISE_ENTREE      @map("ENTRY_GRACE")
+  PAUSE                 @map("BREAK")
+  HEURE_SUPPLEMENTAIRE  @map("OVERTIME")
+  HEURE_SPECIALE        @map("SPECIAL")
 }
 
 model WorkCycle {
@@ -193,7 +193,7 @@ model TimeEntry {
   clockIn           DateTime?
   clockOut          DateTime?
   totalHours        Float?
-  status            TimeEntryStatus @default(PENDING)
+  status            TimeEntryStatus @default(EN_ATTENTE)
   
   // Validation
   isValidated       Boolean        @default(false)
@@ -212,9 +212,9 @@ model TimeEntry {
 }
 
 enum TimeEntryStatus {
-  PENDING
-  COMPLETED
-  INCOMPLETE
+  EN_ATTENTE  @map("PENDING")
+  TERMINE     @map("COMPLETED")
+  INCOMPLET   @map("INCOMPLETE")
   ABSENT
 }
 
@@ -224,12 +224,12 @@ enum TimeEntryStatus {
 
 model Absence {
   id          Int            @id @default(autoincrement())
-  absenceType AbsenceType    @default(VACATION)
+  absenceType AbsenceType    @default(CONGES)
   startDate   DateTime
   endDate     DateTime
   days        Float
   reason      String?  @db.Text
-  status      ApprovalStatus @default(PENDING)
+  status      ApprovalStatus @default(EN_ATTENTE)
   
   // Relations
   employeeId  Int
@@ -245,13 +245,13 @@ model Absence {
 }
 
 enum AbsenceType {
-  VACATION
-  SICK_LEAVE
-  PERSONAL
-  MATERNITY
-  PATERNITY
-  UNPAID_LEAVE
-  OTHER
+  CONGES             @map("VACATION")
+  CONGE_MALADIE      @map("SICK_LEAVE")
+  PERSONNEL          @map("PERSONAL")
+  MATERNITE          @map("MATERNITY")
+  PATERNITE          @map("PATERNITY")
+  SANS_SOLDE         @map("UNPAID_LEAVE")
+  AUTRE              @map("OTHER")
 }
 
 model Overtime {
@@ -259,7 +259,7 @@ model Overtime {
   date        DateTime
   hours       Float
   reason      String?  @db.Text
-  status      ApprovalStatus @default(PENDING)
+  status      ApprovalStatus @default(EN_ATTENTE)
   
   // Relations
   employeeId  Int
@@ -276,9 +276,9 @@ model SpecialHour {
   id          Int            @id @default(autoincrement())
   date        DateTime
   hours       Float
-  hourType    SpecialHourType @default(HOLIDAY)
+  hourType    SpecialHourType @default(FERIE)
   reason      String?  @db.Text
-  status      ApprovalStatus @default(PENDING)
+  status      ApprovalStatus @default(EN_ATTENTE)
   
   // Relations
   employeeId  Int
@@ -292,16 +292,16 @@ model SpecialHour {
 }
 
 enum SpecialHourType {
-  HOLIDAY
-  NIGHT_SHIFT
+  FERIE      @map("HOLIDAY")
+  NUIT       @map("NIGHT_SHIFT")
   WEEKEND
-  ON_CALL
+  ASTREINTE  @map("ON_CALL")
 }
 
 enum ApprovalStatus {
-  PENDING
-  APPROVED
-  REJECTED
+  EN_ATTENTE  @map("PENDING")
+  APPROUVE    @map("APPROVED")
+  REJETE      @map("REJECTED")
 }
 
 // ============================================
@@ -310,7 +310,7 @@ enum ApprovalStatus {
 
 model Notification {
   id        Int                @id @default(autoincrement())
-  type      NotificationType   @default(INFO)
+  type      NotificationType   @default(INFORMATION)
   title     String
   message   String  @db.Text
   isRead    Boolean            @default(false)
@@ -326,12 +326,12 @@ model Notification {
 }
 
 enum NotificationType {
-  INFO
-  WARNING
-  ERROR
-  SUCCESS
-  APPROVAL_REQUEST
-  SYSTEM_ALERT
+  INFORMATION        @map("INFO")
+  ALERTE             @map("WARNING")
+  ERREUR             @map("ERROR")
+  SUCCES             @map("SUCCESS")
+  DEMANDE_APPROBATION @map("APPROVAL_REQUEST")
+  ALERTE_SYSTEME     @map("SYSTEM_ALERT")
 }
 
 model AuditLog {

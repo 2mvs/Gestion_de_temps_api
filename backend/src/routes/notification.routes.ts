@@ -20,7 +20,7 @@ router.patch('/:id/read', markAsRead);
 router.patch('/mark-all-read', markAllAsRead);
 router.delete('/:id', deleteNotification);
 router.post('/test', sendTestNotification);
-router.post('/system-alert', authorize('ADMIN'), sendSystemAlert);
+router.post('/system-alert', authorize('ADMINISTRATEUR'), sendSystemAlert);
 
 export default router;
 

@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyToken, JwtPayload } from '../utils/jwt';
+import { matchesAllowedRoles } from '../utils/roles';
 
 // Étendre l'interface Request pour inclure user
 declare global {
@@ -36,7 +37,7 @@ export const authorize = (...roles: string[]) => {
       return;
     }
 
-    if (roles.length && !roles.includes(req.user.role)) {
+    if (roles.length && !matchesAllowedRoles(req.user.role, roles)) {
       res.status(403).json({ message: 'Accès refusé' });
       return;
     }

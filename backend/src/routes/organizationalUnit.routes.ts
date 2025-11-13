@@ -40,9 +40,9 @@ router.get('/tree', getOrganizationalUnitTree);
 router.get('/roots', getRootOrganizationalUnits);
 router.get('/:id', getOrganizationalUnitById);
 router.get('/:id/children', getOrganizationalUnitChildren);
-router.post('/', authorize('ADMIN'), validate(createValidation), createOrganizationalUnit);
-router.put('/:id', authorize('ADMIN'), validate(updateValidation), updateOrganizationalUnit);
-router.delete('/:id', authorize('ADMIN'), deleteOrganizationalUnit);
+router.post('/', authorize('ADMINISTRATEUR'), validate(createValidation), createOrganizationalUnit);
+router.put('/:id', authorize('ADMINISTRATEUR'), validate(updateValidation), updateOrganizationalUnit);
+router.delete('/:id', authorize('ADMINISTRATEUR'), deleteOrganizationalUnit);
 
 export default router;
 

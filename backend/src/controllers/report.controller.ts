@@ -1,10 +1,43 @@
 import { Request, Response } from 'express';
+import { ApprovalStatus, ContractType, EmployeeStatus } from '@prisma/client';
 import prisma from '../config/database';
+
+const normalize = (value: string): string => value.toString().toUpperCase();
+
+const EMPLOYEE_STATUS_MAPPING: Record<string, EmployeeStatus> = {
+  ACTIF: EmployeeStatus.ACTIF,
+  ACTIVE: EmployeeStatus.ACTIF,
+  INACTIF: EmployeeStatus.INACTIF,
+  INACTIVE: EmployeeStatus.INACTIF,
+  SUSPENDU: EmployeeStatus.SUSPENDU,
+  SUSPENDED: EmployeeStatus.SUSPENDU,
+  RESILIE: EmployeeStatus.RESILIE,
+  TERMINATED: EmployeeStatus.RESILIE,
+};
+
+const CONTRACT_TYPE_MAPPING: Record<string, ContractType> = {
+  TEMPS_PLEIN: ContractType.TEMPS_PLEIN,
+  FULL_TIME: ContractType.TEMPS_PLEIN,
+  TEMPS_PARTIEL: ContractType.TEMPS_PARTIEL,
+  PART_TIME: ContractType.TEMPS_PARTIEL,
+  INTERIM: ContractType.INTERIM,
+  CONTRAT: ContractType.CONTRAT,
+  CONTRACT: ContractType.CONTRAT,
+};
+
+const APPROVAL_STATUS_MAPPING: Record<string, ApprovalStatus> = {
+  EN_ATTENTE: ApprovalStatus.EN_ATTENTE,
+  PENDING: ApprovalStatus.EN_ATTENTE,
+  APPROUVE: ApprovalStatus.APPROUVE,
+  APPROVED: ApprovalStatus.APPROUVE,
+  REJETE: ApprovalStatus.REJETE,
+  REJECTED: ApprovalStatus.REJETE,
+};
 
 export const getGeneralReport = async (req: Request, res: Response): Promise<void> => {
   try {
     const totalEmployees = await prisma.employee.count({
-      where: { deletedAt: null, status: 'ACTIVE' },
+      where: { deletedAt: null, status: EmployeeStatus.ACTIF },
     });
 
     const totalWorkCycles = await prisma.workCycle.count({
@@ -16,11 +49,11 @@ export const getGeneralReport = async (req: Request, res: Response): Promise<voi
     });
 
     const pendingAbsences = await prisma.absence.count({
-      where: { status: 'PENDING' },
+      where: { status: ApprovalStatus.EN_ATTENTE },
     });
 
     const pendingOvertimes = await prisma.overtime.count({
-      where: { status: 'PENDING' },
+      where: { status: ApprovalStatus.EN_ATTENTE },
     });
 
     res.json({
@@ -50,11 +83,19 @@ export const getEmployeesReport = async (req: Request, res: Response): Promise<v
     }
 
     if (status) {
-      where.status = status;
+      const statusValue = Array.isArray(status) ? status[0] : status;
+      const mappedStatus = statusValue ? EMPLOYEE_STATUS_MAPPING[normalize(statusValue)] : undefined;
+      if (mappedStatus) {
+        where.status = mappedStatus;
+      }
     }
 
     if (contractType) {
-      where.contractType = contractType;
+      const contractValue = Array.isArray(contractType) ? contractType[0] : contractType;
+      const mappedContract = contractValue ? CONTRACT_TYPE_MAPPING[normalize(contractValue)] : undefined;
+      if (mappedContract) {
+        where.contractType = mappedContract;
+      }
     }
 
     const employees = await prisma.employee.findMany({
@@ -296,9 +337,9 @@ export const getOvertimeSummary = async (req: Request, res: Response): Promise<v
         };
       }
       acc[empId].totalHours += overtime.hours;
-      if (overtime.status === 'APPROVED') acc[empId].approved += overtime.hours;
-      if (overtime.status === 'PENDING') acc[empId].pending += overtime.hours;
-      if (overtime.status === 'REJECTED') acc[empId].rejected += overtime.hours;
+      if (overtime.status === ApprovalStatus.APPROUVE) acc[empId].approved += overtime.hours;
+      if (overtime.status === ApprovalStatus.EN_ATTENTE) acc[empId].pending += overtime.hours;
+      if (overtime.status === ApprovalStatus.REJETE) acc[empId].rejected += overtime.hours;
       return acc;
     }, {});
 
