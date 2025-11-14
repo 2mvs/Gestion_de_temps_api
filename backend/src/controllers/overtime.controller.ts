@@ -26,7 +26,12 @@ const mapApprovalStatus = (value?: string | null): ApprovalStatus | undefined =>
 
 export const getAllOvertimes = async (req: Request, res: Response): Promise<void> => {
   try {
-    if (!isAdminRole(req.user?.role)) {
+    const requester = req.user;
+    if (!requester) {
+      throw new CustomError('Non authentifié', 401);
+    }
+
+    if (!isAdminRole(requester.role)) {
       throw new CustomError('Accès refusé', 403);
     }
 
@@ -88,6 +93,11 @@ export const getAllOvertimes = async (req: Request, res: Response): Promise<void
 
 export const getOvertimesByEmployee = async (req: Request, res: Response): Promise<void> => {
   try {
+    const requester = req.user;
+    if (!requester) {
+      throw new CustomError('Non authentifié', 401);
+    }
+
     const { employeeId } = req.params;
 
     const parsedEmployeeId = parseInt(employeeId, 10);
@@ -95,8 +105,8 @@ export const getOvertimesByEmployee = async (req: Request, res: Response): Promi
       throw new CustomError('Identifiant employé invalide', 400);
     }
 
-    if (isManagerRole(req.user?.role)) {
-      const hasAccess = await managerHasAccessToEmployee(req.user.userId, parsedEmployeeId);
+    if (isManagerRole(requester.role)) {
+      const hasAccess = await managerHasAccessToEmployee(requester.userId, parsedEmployeeId);
       if (!hasAccess) {
         throw new CustomError('Accès refusé', 403);
       }
@@ -129,6 +139,11 @@ export const getOvertimesByEmployee = async (req: Request, res: Response): Promi
 
 export const createOvertime = async (req: Request, res: Response): Promise<void> => {
   try {
+    const requester = req.user;
+    if (!requester) {
+      throw new CustomError('Non authentifié', 401);
+    }
+
     const { employeeId, date, hours, reason } = req.body;
 
     const parsedEmployeeId = parseInt(employeeId, 10);
@@ -136,8 +151,8 @@ export const createOvertime = async (req: Request, res: Response): Promise<void>
       throw new CustomError('Identifiant employé invalide', 400);
     }
 
-    if (isManagerRole(req.user?.role)) {
-      const hasAccess = await managerHasAccessToEmployee(req.user.userId, parsedEmployeeId);
+    if (isManagerRole(requester.role)) {
+      const hasAccess = await managerHasAccessToEmployee(requester.userId, parsedEmployeeId);
       if (!hasAccess) {
         throw new CustomError('Accès refusé', 403);
       }
@@ -157,7 +172,7 @@ export const createOvertime = async (req: Request, res: Response): Promise<void>
     });
 
     await createAuditLog({
-      userId: req.user!.userId,
+      userId: requester.userId,
       action: 'CREATE',
       modelType: 'Overtime',
       modelId: overtime.id,
@@ -177,6 +192,11 @@ export const createOvertime = async (req: Request, res: Response): Promise<void>
 
 export const approveOvertime = async (req: Request, res: Response): Promise<void> => {
   try {
+    const requester = req.user;
+    if (!requester) {
+      throw new CustomError('Non authentifié', 401);
+    }
+
     const { id } = req.params;
     const { status } = req.body;
 
@@ -192,8 +212,8 @@ export const approveOvertime = async (req: Request, res: Response): Promise<void
       throw new CustomError('Heures supplémentaires non trouvées', 404);
     }
 
-    if (isManagerRole(req.user?.role)) {
-      const hasAccess = await managerHasAccessToEmployee(req.user.userId, oldOvertime.employeeId);
+    if (isManagerRole(requester.role)) {
+      const hasAccess = await managerHasAccessToEmployee(requester.userId, oldOvertime.employeeId);
       if (!hasAccess) {
         throw new CustomError('Accès refusé', 403);
       }
@@ -211,7 +231,7 @@ export const approveOvertime = async (req: Request, res: Response): Promise<void
     });
 
     await createAuditLog({
-      userId: req.user!.userId,
+      userId: requester.userId,
       action: status === ApprovalStatus.APPROUVE ? 'APPROVE' : 'REJECT',
       modelType: 'Overtime',
       modelId: overtime.id,

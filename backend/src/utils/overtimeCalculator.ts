@@ -165,6 +165,7 @@ export async function calculateHoursWorked(
     start: string;
     end: string;
     hours: number;
+    label: string;
     type: string;
     multiplier: number;
   }> = [];

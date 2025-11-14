@@ -1,8 +1,7 @@
 import { Request, Response } from 'express';
-import { NotificationType } from '@prisma/client';
+import { NotificationType, UserRole } from '@prisma/client';
 import prisma from '../config/database';
 import { CustomError } from '../middlewares/error.middleware';
-import { ADMIN_ROLES } from '../utils/roles';
 
 export const getAllNotifications = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -152,9 +151,7 @@ export const sendSystemAlert = async (req: Request, res: Response): Promise<void
     // Envoyer à tous les utilisateurs avec le rôle ADMIN
     const admins = await prisma.user.findMany({
       where: {
-        role: {
-          in: ADMIN_ROLES,
-        },
+        role: UserRole.ADMINISTRATEUR,
       },
     });
 

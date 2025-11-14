@@ -26,7 +26,12 @@ const mapApprovalStatus = (value?: string | null): ApprovalStatus | undefined =>
 
 export const getAllSpecialHours = async (req: Request, res: Response): Promise<void> => {
   try {
-    if (!isAdminRole(req.user?.role)) {
+    const requester = req.user;
+    if (!requester) {
+      throw new CustomError('Non authentifié', 401);
+    }
+
+    if (!isAdminRole(requester.role)) {
       throw new CustomError('Accès refusé', 403);
     }
 
@@ -88,6 +93,11 @@ export const getAllSpecialHours = async (req: Request, res: Response): Promise<v
 
 export const getSpecialHoursByEmployee = async (req: Request, res: Response): Promise<void> => {
   try {
+    const requester = req.user;
+    if (!requester) {
+      throw new CustomError('Non authentifié', 401);
+    }
+
     const { employeeId } = req.params;
 
     const parsedEmployeeId = parseInt(employeeId, 10);
@@ -95,8 +105,8 @@ export const getSpecialHoursByEmployee = async (req: Request, res: Response): Pr
       throw new CustomError('Identifiant employé invalide', 400);
     }
 
-    if (isManagerRole(req.user?.role)) {
-      const hasAccess = await managerHasAccessToEmployee(req.user.userId, parsedEmployeeId);
+    if (isManagerRole(requester.role)) {
+      const hasAccess = await managerHasAccessToEmployee(requester.userId, parsedEmployeeId);
       if (!hasAccess) {
         throw new CustomError('Accès refusé', 403);
       }
@@ -129,6 +139,11 @@ export const getSpecialHoursByEmployee = async (req: Request, res: Response): Pr
 
 export const createSpecialHour = async (req: Request, res: Response): Promise<void> => {
   try {
+    const requester = req.user;
+    if (!requester) {
+      throw new CustomError('Non authentifié', 401);
+    }
+
     const { employeeId, date, hours, hourType, reason } = req.body;
 
     const parsedEmployeeId = parseInt(employeeId, 10);
@@ -136,8 +151,8 @@ export const createSpecialHour = async (req: Request, res: Response): Promise<vo
       throw new CustomError('Identifiant employé invalide', 400);
     }
 
-    if (isManagerRole(req.user?.role)) {
-      const hasAccess = await managerHasAccessToEmployee(req.user.userId, parsedEmployeeId);
+    if (isManagerRole(requester.role)) {
+      const hasAccess = await managerHasAccessToEmployee(requester.userId, parsedEmployeeId);
       if (!hasAccess) {
         throw new CustomError('Accès refusé', 403);
       }
@@ -158,7 +173,7 @@ export const createSpecialHour = async (req: Request, res: Response): Promise<vo
     });
 
     await createAuditLog({
-      userId: req.user!.userId,
+      userId: requester.userId,
       action: 'CREATE',
       modelType: 'SpecialHour',
       modelId: specialHour.id,
@@ -178,6 +193,11 @@ export const createSpecialHour = async (req: Request, res: Response): Promise<vo
 
 export const approveSpecialHour = async (req: Request, res: Response): Promise<void> => {
   try {
+    const requester = req.user;
+    if (!requester) {
+      throw new CustomError('Non authentifié', 401);
+    }
+
     const { id } = req.params;
     const { status } = req.body;
 
@@ -193,8 +213,8 @@ export const approveSpecialHour = async (req: Request, res: Response): Promise<v
       throw new CustomError('Heures spéciales non trouvées', 404);
     }
 
-    if (isManagerRole(req.user?.role)) {
-      const hasAccess = await managerHasAccessToEmployee(req.user.userId, oldSpecialHour.employeeId);
+    if (isManagerRole(requester.role)) {
+      const hasAccess = await managerHasAccessToEmployee(requester.userId, oldSpecialHour.employeeId);
       if (!hasAccess) {
         throw new CustomError('Accès refusé', 403);
       }
@@ -212,7 +232,7 @@ export const approveSpecialHour = async (req: Request, res: Response): Promise<v
     });
 
     await createAuditLog({
-      userId: req.user!.userId,
+      userId: requester.userId,
       action: status === ApprovalStatus.APPROUVE ? 'APPROVE' : 'REJECT',
       modelType: 'SpecialHour',
       modelId: specialHour.id,

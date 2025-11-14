@@ -1,6 +1,13 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
-import { ApprovalStatus, TimeEntryStatus, UserRole } from '@prisma/client';
+import {
+  ApprovalStatus,
+  ContractType,
+  EmployeeStatus,
+  Gender,
+  TimeEntryStatus,
+  UserRole,
+} from '@prisma/client';
 import prisma from '../config/database';
 import { CustomError } from '../middlewares/error.middleware';
 import { createAuditLog } from '../utils/audit';
@@ -10,6 +17,10 @@ import { calculateHoursWorked } from '../utils/overtimeCalculator';
 
 export const getEmployeePayslip = async (req: Request, res: Response): Promise<void> => {
   try {
+    const requester = req.user;
+    if (!requester) {
+      throw new CustomError('Non authentifié', 401);
+    }
     const { id } = req.params;
     const { startDate, endDate } = req.query;
 
@@ -40,8 +51,8 @@ export const getEmployeePayslip = async (req: Request, res: Response): Promise<v
       throw new CustomError('Employé non trouvé', 404);
     }
 
-    if (isManagerRole(req.user?.role)) {
-      const hasAccess = await managerHasAccessToEmployee(req.user.userId, employee.id);
+    if (isManagerRole(requester.role)) {
+      const hasAccess = await managerHasAccessToEmployee(requester.userId, employee.id);
       if (!hasAccess) {
         throw new CustomError('Accès refusé', 403);
       }
@@ -187,13 +198,17 @@ export const getEmployeePayslip = async (req: Request, res: Response): Promise<v
 
 export const getAllEmployees = async (req: Request, res: Response): Promise<void> => {
   try {
+    const requester = req.user;
+    if (!requester) {
+      throw new CustomError('Non authentifié', 401);
+    }
     const where: any = {
       deletedAt: null,
     };
 
-    if (isManagerRole(req.user?.role)) {
+    if (isManagerRole(requester.role)) {
       where.organizationalUnit = {
-        managerId: req.user.userId,
+        managerId: requester.userId,
       };
     }
 
@@ -259,6 +274,10 @@ export const getAllEmployees = async (req: Request, res: Response): Promise<void
 
 export const getEmployeeById = async (req: Request, res: Response): Promise<void> => {
   try {
+    const requester = req.user;
+    if (!requester) {
+      throw new CustomError('Non authentifié', 401);
+    }
     const { id } = req.params;
 
     const employee = await prisma.employee.findFirst({
@@ -283,8 +302,8 @@ export const getEmployeeById = async (req: Request, res: Response): Promise<void
       throw new CustomError('Employé non trouvé', 404);
     }
 
-    if (isManagerRole(req.user?.role)) {
-      const hasAccess = await managerHasAccessToEmployee(req.user.userId, employee.id);
+    if (isManagerRole(requester.role)) {
+      const hasAccess = await managerHasAccessToEmployee(requester.userId, employee.id);
       if (!hasAccess) {
         throw new CustomError('Accès refusé', 403);
       }
@@ -298,6 +317,10 @@ export const getEmployeeById = async (req: Request, res: Response): Promise<void
 
 export const createEmployee = async (req: Request, res: Response): Promise<void> => {
   try {
+    const requester = req.user;
+    if (!requester) {
+      throw new CustomError('Non authentifié', 401);
+    }
     const {
       employeeNumber,
       firstName,
@@ -312,7 +335,7 @@ export const createEmployee = async (req: Request, res: Response): Promise<void>
       workCycleId,
     } = req.body;
 
-    if (isManagerRole(req.user?.role)) {
+    if (isManagerRole(requester.role)) {
       if (!organizationalUnitId) {
         throw new CustomError('Vous devez sélectionner une unité organisationnelle', 403);
       }
@@ -320,7 +343,7 @@ export const createEmployee = async (req: Request, res: Response): Promise<void>
       if (Number.isNaN(unitId)) {
         throw new CustomError('Unité organisationnelle invalide', 400);
       }
-      const hasUnitAccess = await managerHasAccessToUnit(req.user.userId, unitId);
+      const hasUnitAccess = await managerHasAccessToUnit(requester.userId, unitId);
       if (!hasUnitAccess) {
         throw new CustomError('Accès refusé pour cette unité organisationnelle', 403);
       }
@@ -348,7 +371,7 @@ export const createEmployee = async (req: Request, res: Response): Promise<void>
 
     // Créer un log d'audit
     await createAuditLog({
-      userId: req.user!.userId,
+      userId: requester.userId,
       action: 'CREATE',
       modelType: 'Employee',
       modelId: employee.id,
@@ -368,6 +391,10 @@ export const createEmployee = async (req: Request, res: Response): Promise<void>
 
 export const updateEmployee = async (req: Request, res: Response): Promise<void> => {
   try {
+    const requester = req.user;
+    if (!requester) {
+      throw new CustomError('Non authentifié', 401);
+    }
     const { id } = req.params;
     const {
       firstName,
@@ -394,8 +421,8 @@ export const updateEmployee = async (req: Request, res: Response): Promise<void>
       throw new CustomError('Employé non trouvé', 404);
     }
 
-    if (isManagerRole(req.user?.role)) {
-      const hasAccess = await managerHasAccessToEmployee(req.user.userId, oldEmployee.id);
+    if (isManagerRole(requester.role)) {
+      const hasAccess = await managerHasAccessToEmployee(requester.userId, oldEmployee.id);
       if (!hasAccess) {
         throw new CustomError('Accès refusé', 403);
       }
@@ -430,7 +457,7 @@ export const updateEmployee = async (req: Request, res: Response): Promise<void>
 
     // Créer un log d'audit
     await createAuditLog({
-      userId: req.user!.userId,
+      userId: requester.userId,
       action: 'UPDATE',
       modelType: 'Employee',
       modelId: employee.id,
@@ -451,6 +478,10 @@ export const updateEmployee = async (req: Request, res: Response): Promise<void>
 
 export const deleteEmployee = async (req: Request, res: Response): Promise<void> => {
   try {
+    const requester = req.user;
+    if (!requester) {
+      throw new CustomError('Non authentifié', 401);
+    }
     const { id } = req.params;
 
     const employee = await prisma.employee.findFirst({
@@ -464,8 +495,8 @@ export const deleteEmployee = async (req: Request, res: Response): Promise<void>
       throw new CustomError('Employé non trouvé', 404);
     }
 
-    if (isManagerRole(req.user?.role)) {
-      const hasAccess = await managerHasAccessToEmployee(req.user.userId, employee.id);
+    if (isManagerRole(requester.role)) {
+      const hasAccess = await managerHasAccessToEmployee(requester.userId, employee.id);
       if (!hasAccess) {
         throw new CustomError('Accès refusé', 403);
       }
@@ -476,13 +507,13 @@ export const deleteEmployee = async (req: Request, res: Response): Promise<void>
       where: { id: parseInt(id) },
       data: {
         deletedAt: new Date(),
-        status: 'TERMINATED',
+        status: EmployeeStatus.RESILIE,
       },
     });
 
     // Créer un log d'audit
     await createAuditLog({
-      userId: req.user!.userId,
+      userId: requester.userId,
       action: 'DELETE',
       modelType: 'Employee',
       modelId: parseInt(id),
@@ -499,6 +530,10 @@ export const deleteEmployee = async (req: Request, res: Response): Promise<void>
 
 export const linkEmployeeAccount = async (req: Request, res: Response): Promise<void> => {
   try {
+    const requester = req.user;
+    if (!requester) {
+      throw new CustomError('Non authentifié', 401);
+    }
     const { id } = req.params;
     const { email, password, role } = req.body;
 
@@ -565,7 +600,7 @@ export const linkEmployeeAccount = async (req: Request, res: Response): Promise<
         throw new CustomError('Un mot de passe de minimum 6 caractères est requis pour créer un nouvel utilisateur', 400);
       }
       const hashedPassword = await bcrypt.hash(password, 10);
-      const targetRole = requestedRole ?? UserRole.USER;
+      const targetRole = requestedRole ?? UserRole.UTILISATEUR;
       const createdUser = await prisma.user.create({
         data: {
           email: normalizedEmail,
@@ -624,9 +659,9 @@ export const linkEmployeeAccount = async (req: Request, res: Response): Promise<
       data: employeeUpdateData,
     });
 
-    if (req.user?.userId) {
+    if (requester?.userId) {
       await createAuditLog({
-        userId: req.user.userId,
+        userId: requester.userId,
         action: employee.userId ? 'UPDATE' : 'CREATE',
         modelType: 'EmployeeUserLink',
         modelId: employee.id,
@@ -655,6 +690,10 @@ export const linkEmployeeAccount = async (req: Request, res: Response): Promise<
 
 export const bulkImportEmployees = async (req: Request, res: Response): Promise<void> => {
   try {
+    const requester = req.user;
+    if (!requester) {
+      throw new CustomError('Non authentifié', 401);
+    }
     const employees = req.body;
 
     if (!Array.isArray(employees) || employees.length === 0) {
@@ -667,7 +706,6 @@ export const bulkImportEmployees = async (req: Request, res: Response): Promise<
 
     for (const empData of employees) {
       try {
-        // Vérifier si l'employé existe déjà
         const existing = await prisma.employee.findUnique({
           where: { employeeNumber: empData.employeeNumber },
         });
@@ -677,21 +715,42 @@ export const bulkImportEmployees = async (req: Request, res: Response): Promise<
           continue;
         }
 
-        await prisma.employee.create({
-          data: {
+        const parsedHireDate = empData.hireDate ? new Date(empData.hireDate) : undefined;
+        const parsedContractType =
+          (empData.contractType as ContractType) ?? ContractType.TEMPS_PLEIN;
+        const parsedStatus = (empData.status as EmployeeStatus) ?? EmployeeStatus.ACTIF;
+        const parsedGender = (empData.gender as Gender) ?? Gender.INCONNU;
+        const parsedOrgUnitId = empData.organizationalUnitId
+          ? parseInt(empData.organizationalUnitId, 10)
+          : null;
+        const parsedWorkCycleId = empData.workCycleId ? parseInt(empData.workCycleId, 10) : null;
+
+        await prisma.employee.upsert({
+          where: { employeeNumber: empData.employeeNumber },
+          update: {
+            firstName: empData.firstName,
+            lastName: empData.lastName,
+            email: empData.email || null,
+            phone: empData.phone || null,
+            gender: parsedGender,
+            contractType: parsedContractType,
+            status: parsedStatus,
+            organizationalUnitId: parsedOrgUnitId,
+            workCycleId: parsedWorkCycleId,
+            ...(parsedHireDate ? { hireDate: parsedHireDate } : {}),
+          },
+          create: {
             employeeNumber: empData.employeeNumber,
             firstName: empData.firstName,
             lastName: empData.lastName,
             email: empData.email || null,
             phone: empData.phone || null,
-            gender: empData.gender || 'UNKNOWN',
-            hireDate: new Date(empData.hireDate),
-            contractType: empData.contractType || 'FULL_TIME',
-            status: empData.status || 'ACTIVE',
-            organizationalUnitId: empData.organizationalUnitId
-              ? parseInt(empData.organizationalUnitId)
-              : null,
-            workCycleId: empData.workCycleId ? parseInt(empData.workCycleId) : null,
+            gender: parsedGender,
+            hireDate: parsedHireDate ?? new Date(),
+            contractType: parsedContractType,
+            status: parsedStatus,
+            organizationalUnitId: parsedOrgUnitId,
+            workCycleId: parsedWorkCycleId,
           },
         });
 

@@ -4,6 +4,27 @@ import prisma from '../config/database';
 
 const normalize = (value: string): string => value.toString().toUpperCase();
 
+const extractQueryValue = (value: unknown): string | undefined => {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  if (Array.isArray(value)) {
+    return extractQueryValue(value[0]);
+  }
+
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (typeof value === 'object' && 'toString' in value) {
+    const strValue = (value as { toString: () => string }).toString();
+    return typeof strValue === 'string' ? strValue : undefined;
+  }
+
+  return String(value);
+};
+
 const EMPLOYEE_STATUS_MAPPING: Record<string, EmployeeStatus> = {
   ACTIF: EmployeeStatus.ACTIF,
   ACTIVE: EmployeeStatus.ACTIF,
@@ -78,21 +99,25 @@ export const getEmployeesReport = async (req: Request, res: Response): Promise<v
       deletedAt: null,
     };
 
-    if (organizationalUnitId) {
-      where.organizationalUnitId = parseInt(organizationalUnitId as string);
+    const organizationalUnitIdValue = extractQueryValue(organizationalUnitId);
+    if (organizationalUnitIdValue) {
+      const parsedOrgUnitId = parseInt(organizationalUnitIdValue, 10);
+      if (!Number.isNaN(parsedOrgUnitId)) {
+        where.organizationalUnitId = parsedOrgUnitId;
+      }
     }
 
-    if (status) {
-      const statusValue = Array.isArray(status) ? status[0] : status;
-      const mappedStatus = statusValue ? EMPLOYEE_STATUS_MAPPING[normalize(statusValue)] : undefined;
+    const statusValue = extractQueryValue(status);
+    if (statusValue) {
+      const mappedStatus = EMPLOYEE_STATUS_MAPPING[normalize(statusValue)];
       if (mappedStatus) {
         where.status = mappedStatus;
       }
     }
 
-    if (contractType) {
-      const contractValue = Array.isArray(contractType) ? contractType[0] : contractType;
-      const mappedContract = contractValue ? CONTRACT_TYPE_MAPPING[normalize(contractValue)] : undefined;
+    const contractValue = extractQueryValue(contractType);
+    if (contractValue) {
+      const mappedContract = CONTRACT_TYPE_MAPPING[normalize(contractValue)];
       if (mappedContract) {
         where.contractType = mappedContract;
       }

@@ -19,12 +19,17 @@ const computeInclusiveDays = (start: Date, end: Date): number => {
 
 export const getAllAbsences = async (req: Request, res: Response): Promise<void> => {
   try {
+    const requester = req.user;
+    if (!requester) {
+      throw new CustomError('Non authentifié', 401);
+    }
+
     const where: any = {};
 
-    if (isManagerRole(req.user?.role)) {
+    if (isManagerRole(requester.role)) {
       where.employee = {
         organizationalUnit: {
-          managerId: req.user.userId,
+          managerId: requester.userId,
         },
       };
     }
@@ -60,6 +65,11 @@ export const getAllAbsences = async (req: Request, res: Response): Promise<void>
 
 export const getAbsencesByEmployee = async (req: Request, res: Response): Promise<void> => {
   try {
+    const requester = req.user;
+    if (!requester) {
+      throw new CustomError('Non authentifié', 401);
+    }
+
     const { employeeId } = req.params;
 
     const parsedEmployeeId = parseInt(employeeId, 10);
@@ -67,8 +77,8 @@ export const getAbsencesByEmployee = async (req: Request, res: Response): Promis
       throw new CustomError('Identifiant employé invalide', 400);
     }
 
-    if (isManagerRole(req.user?.role)) {
-      const hasAccess = await managerHasAccessToEmployee(req.user.userId, parsedEmployeeId);
+    if (isManagerRole(requester.role)) {
+      const hasAccess = await managerHasAccessToEmployee(requester.userId, parsedEmployeeId);
       if (!hasAccess) {
         throw new CustomError('Accès refusé', 403);
       }
@@ -107,6 +117,11 @@ export const getAbsencesByEmployee = async (req: Request, res: Response): Promis
 
 export const createAbsence = async (req: Request, res: Response): Promise<void> => {
   try {
+    const requester = req.user;
+    if (!requester) {
+      throw new CustomError('Non authentifié', 401);
+    }
+
     const { employeeId, absenceType, startDate, endDate, days, reason } = req.body;
 
     const parsedEmployeeId = parseInt(employeeId, 10);
@@ -114,8 +129,8 @@ export const createAbsence = async (req: Request, res: Response): Promise<void> 
       throw new CustomError('Identifiant employé invalide', 400);
     }
 
-    if (isManagerRole(req.user?.role)) {
-      const hasAccess = await managerHasAccessToEmployee(req.user.userId, parsedEmployeeId);
+    if (isManagerRole(requester.role)) {
+      const hasAccess = await managerHasAccessToEmployee(requester.userId, parsedEmployeeId);
       if (!hasAccess) {
         throw new CustomError('Accès refusé', 403);
       }
@@ -137,7 +152,7 @@ export const createAbsence = async (req: Request, res: Response): Promise<void> 
     });
 
     await createAuditLog({
-      userId: req.user!.userId,
+      userId: requester.userId,
       action: 'CREATE',
       modelType: 'Absence',
       modelId: absence.id,
@@ -157,6 +172,11 @@ export const createAbsence = async (req: Request, res: Response): Promise<void> 
 
 export const updateAbsence = async (req: Request, res: Response): Promise<void> => {
   try {
+    const requester = req.user;
+    if (!requester) {
+      throw new CustomError('Non authentifié', 401);
+    }
+
     const { id } = req.params;
     const { absenceType, startDate, endDate, reason, employeeId } = req.body;
 
@@ -180,7 +200,6 @@ export const updateAbsence = async (req: Request, res: Response): Promise<void> 
       throw new CustomError('Impossible de modifier une absence déjà approuvée ou rejetée', 400);
     }
 
-    const requester = req.user!;
     const isOwner =
       absence.employee?.userId !== null && absence.employee?.userId !== undefined
         ? absence.employee.userId === requester.userId
@@ -285,6 +304,11 @@ export const updateAbsence = async (req: Request, res: Response): Promise<void> 
 
 export const approveAbsence = async (req: Request, res: Response): Promise<void> => {
   try {
+    const requester = req.user;
+    if (!requester) {
+      throw new CustomError('Non authentifié', 401);
+    }
+
     const { id } = req.params;
     const { status, approvedBy } = req.body;
 
@@ -300,8 +324,8 @@ export const approveAbsence = async (req: Request, res: Response): Promise<void>
       throw new CustomError('Absence non trouvée', 404);
     }
 
-    if (isManagerRole(req.user?.role)) {
-      const hasAccess = await managerHasAccessToEmployee(req.user.userId, oldAbsence.employeeId);
+    if (isManagerRole(requester.role)) {
+      const hasAccess = await managerHasAccessToEmployee(requester.userId, oldAbsence.employeeId);
       if (!hasAccess) {
         throw new CustomError('Accès refusé', 403);
       }
@@ -311,7 +335,7 @@ export const approveAbsence = async (req: Request, res: Response): Promise<void>
       where: { id: parseInt(id) },
       data: {
         status: status as ApprovalStatus,
-        approvedBy: approvedBy ? parseInt(approvedBy) : req.user!.userId,
+        approvedBy: approvedBy ? parseInt(approvedBy) : requester.userId,
         approvedAt: new Date(),
       },
       include: {
@@ -321,7 +345,7 @@ export const approveAbsence = async (req: Request, res: Response): Promise<void>
     });
 
     await createAuditLog({
-      userId: req.user!.userId,
+      userId: requester.userId,
       action: status === ApprovalStatus.APPROUVE ? 'APPROVE' : 'REJECT',
       modelType: 'Absence',
       modelId: absence.id,

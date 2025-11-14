@@ -8,7 +8,7 @@ import {
   calculateHoursWorked,
   autoCreateOvertimeAndSpecialHours,
 } from '../utils/overtimeCalculator';
-import { isManagerRole } from '../utils/roles';
+import { isManagerRole } from '../utils/roles'
 
 const mapTimeEntryStatus = (value: string): TimeEntryStatus => {
   const normalized = value.toString().toUpperCase();
@@ -30,6 +30,11 @@ const mapTimeEntryStatus = (value: string): TimeEntryStatus => {
 
 export const getTimeEntriesByEmployee = async (req: Request, res: Response): Promise<void> => {
   try {
+    const requester = req.user;
+    if (!requester) {
+      throw new CustomError('Non authentifié', 401);
+    }
+
     const { employeeId } = req.params;
     const { startDate, endDate, includeCalculations } = req.query;
 
@@ -38,8 +43,8 @@ export const getTimeEntriesByEmployee = async (req: Request, res: Response): Pro
       throw new CustomError('Identifiant employé invalide', 400);
     }
 
-    if (isManagerRole(req.user?.role)) {
-      const hasAccess = await managerHasAccessToEmployee(req.user.userId, parsedEmployeeId);
+    if (isManagerRole(requester.role)) {
+      const hasAccess = await managerHasAccessToEmployee(requester.userId, parsedEmployeeId);
       if (!hasAccess) {
         throw new CustomError('Accès refusé', 403);
       }
@@ -81,6 +86,11 @@ export const getTimeEntriesByEmployee = async (req: Request, res: Response): Pro
 
 export const clockIn = async (req: Request, res: Response): Promise<void> => {
   try {
+    const requester = req.user;
+    if (!requester) {
+      throw new CustomError('Non authentifié', 401);
+    }
+
     const { employeeId } = req.params;
     const { clockInTime } = req.body;
 
@@ -89,8 +99,8 @@ export const clockIn = async (req: Request, res: Response): Promise<void> => {
       throw new CustomError('Identifiant employé invalide', 400);
     }
 
-    if (isManagerRole(req.user?.role)) {
-      const hasAccess = await managerHasAccessToEmployee(req.user.userId, parsedEmployeeId);
+    if (isManagerRole(requester.role)) {
+      const hasAccess = await managerHasAccessToEmployee(requester.userId, parsedEmployeeId);
       if (!hasAccess) {
         throw new CustomError('Accès refusé', 403);
       }
@@ -153,7 +163,7 @@ export const clockIn = async (req: Request, res: Response): Promise<void> => {
     }
 
     await createAuditLog({
-      userId: req.user!.userId,
+      userId: requester.userId,
       action: 'CLOCK_IN',
       modelType: 'TimeEntry',
       modelId: timeEntry.id,
@@ -173,6 +183,11 @@ export const clockIn = async (req: Request, res: Response): Promise<void> => {
 
 export const clockOut = async (req: Request, res: Response): Promise<void> => {
   try {
+    const requester = req.user;
+    if (!requester) {
+      throw new CustomError('Non authentifié', 401);
+    }
+
     const { employeeId } = req.params;
     const { clockOutTime } = req.body;
 
@@ -181,8 +196,8 @@ export const clockOut = async (req: Request, res: Response): Promise<void> => {
       throw new CustomError('Identifiant employé invalide', 400);
     }
 
-    if (isManagerRole(req.user?.role)) {
-      const hasAccess = await managerHasAccessToEmployee(req.user.userId, parsedEmployeeId);
+    if (isManagerRole(requester.role)) {
+      const hasAccess = await managerHasAccessToEmployee(requester.userId, parsedEmployeeId);
       if (!hasAccess) {
         throw new CustomError('Accès refusé', 403);
       }
@@ -276,7 +291,7 @@ export const clockOut = async (req: Request, res: Response): Promise<void> => {
     }
 
     await createAuditLog({
-      userId: req.user!.userId,
+      userId: requester.userId,
       action: 'CLOCK_OUT',
       modelType: 'TimeEntry',
       modelId: updatedEntry.id,
@@ -297,6 +312,11 @@ export const clockOut = async (req: Request, res: Response): Promise<void> => {
 
 export const updateTimeEntry = async (req: Request, res: Response): Promise<void> => {
   try {
+    const requester = req.user;
+    if (!requester) {
+      throw new CustomError('Non authentifié', 401);
+    }
+
     const { id } = req.params;
     const { clockIn, clockOut, totalHours, status } = req.body;
 
@@ -308,15 +328,15 @@ export const updateTimeEntry = async (req: Request, res: Response): Promise<void
       throw new CustomError('Pointage introuvable', 404);
     }
 
-    if (isManagerRole(req.user?.role)) {
-      const hasAccess = await managerHasAccessToEmployee(req.user.userId, timeEntry.employeeId);
+    if (isManagerRole(requester.role)) {
+      const hasAccess = await managerHasAccessToEmployee(requester.userId, timeEntry.employeeId);
       if (!hasAccess) {
         throw new CustomError('Accès refusé', 403);
       }
     }
 
-    if (isManagerRole(req.user?.role)) {
-      const hasAccess = await managerHasAccessToEmployee(req.user.userId, timeEntry.employeeId);
+    if (isManagerRole(requester.role)) {
+      const hasAccess = await managerHasAccessToEmployee(requester.userId, timeEntry.employeeId);
       if (!hasAccess) {
         throw new CustomError('Accès refusé', 403);
       }
@@ -380,7 +400,7 @@ export const updateTimeEntry = async (req: Request, res: Response): Promise<void
     });
 
     await createAuditLog({
-      userId: req.user!.userId,
+      userId: requester.userId,
       action: 'UPDATE',
       modelType: 'TimeEntry',
       modelId: updatedEntry.id,
@@ -401,6 +421,11 @@ export const updateTimeEntry = async (req: Request, res: Response): Promise<void
 
 export const deleteTimeEntry = async (req: Request, res: Response): Promise<void> => {
   try {
+    const requester = req.user;
+    if (!requester) {
+      throw new CustomError('Non authentifié', 401);
+    }
+
     const { id } = req.params;
 
     const timeEntry = await prisma.timeEntry.findUnique({
@@ -416,7 +441,7 @@ export const deleteTimeEntry = async (req: Request, res: Response): Promise<void
     });
 
     await createAuditLog({
-      userId: req.user!.userId,
+      userId: requester.userId,
       action: 'DELETE',
       modelType: 'TimeEntry',
       modelId: timeEntry.id,
@@ -435,6 +460,11 @@ export const deleteTimeEntry = async (req: Request, res: Response): Promise<void
 
 export const getBalance = async (req: Request, res: Response): Promise<void> => {
   try {
+    const requester = req.user;
+    if (!requester) {
+      throw new CustomError('Non authentifié', 401);
+    }
+
     const { employeeId } = req.params;
     const { startDate, endDate } = req.query;
 
@@ -443,8 +473,8 @@ export const getBalance = async (req: Request, res: Response): Promise<void> => 
       throw new CustomError('Identifiant employé invalide', 400);
     }
 
-    if (isManagerRole(req.user?.role)) {
-      const hasAccess = await managerHasAccessToEmployee(req.user.userId, parsedEmployeeId);
+    if (isManagerRole(requester.role)) {
+      const hasAccess = await managerHasAccessToEmployee(requester.userId, parsedEmployeeId);
       if (!hasAccess) {
         throw new CustomError('Accès refusé', 403);
       }
@@ -515,6 +545,11 @@ export const getBalance = async (req: Request, res: Response): Promise<void> => 
 
 export const validateTimeEntry = async (req: Request, res: Response): Promise<void> => {
   try {
+    const requester = req.user;
+    if (!requester) {
+      throw new CustomError('Non authentifié', 401);
+    }
+
     const { id } = req.params;
     const { autoCorrect } = req.query;
 
@@ -526,8 +561,8 @@ export const validateTimeEntry = async (req: Request, res: Response): Promise<vo
       throw new CustomError('Pointage non trouvé', 404);
     }
 
-    if (isManagerRole(req.user?.role)) {
-      const hasAccess = await managerHasAccessToEmployee(req.user.userId, timeEntry.employeeId);
+    if (isManagerRole(requester.role)) {
+      const hasAccess = await managerHasAccessToEmployee(requester.userId, timeEntry.employeeId);
       if (!hasAccess) {
         throw new CustomError('Accès refusé', 403);
       }
@@ -579,6 +614,11 @@ export const validateTimeEntry = async (req: Request, res: Response): Promise<vo
 
 export const validatePeriod = async (req: Request, res: Response): Promise<void> => {
   try {
+    const requester = req.user;
+    if (!requester) {
+      throw new CustomError('Non authentifié', 401);
+    }
+
     const { employeeId } = req.params;
     const { startDate, endDate, autoCorrect } = req.body;
 
@@ -587,8 +627,8 @@ export const validatePeriod = async (req: Request, res: Response): Promise<void>
       throw new CustomError('Identifiant employé invalide', 400);
     }
 
-    if (isManagerRole(req.user?.role)) {
-      const hasAccess = await managerHasAccessToEmployee(req.user.userId, parsedEmployeeId);
+    if (isManagerRole(requester.role)) {
+      const hasAccess = await managerHasAccessToEmployee(requester.userId, parsedEmployeeId);
       if (!hasAccess) {
         throw new CustomError('Accès refusé', 403);
       }
@@ -744,6 +784,11 @@ export const validatePeriod = async (req: Request, res: Response): Promise<void>
 
 export const getValidationStats = async (req: Request, res: Response): Promise<void> => {
   try {
+    const requester = req.user;
+    if (!requester) {
+      throw new CustomError('Non authentifié', 401);
+    }
+
     const { employeeId } = req.params;
     const { startDate, endDate } = req.query;
 
@@ -752,8 +797,8 @@ export const getValidationStats = async (req: Request, res: Response): Promise<v
       throw new CustomError('Identifiant employé invalide', 400);
     }
 
-    if (isManagerRole(req.user?.role)) {
-      const hasAccess = await managerHasAccessToEmployee(req.user.userId, parsedEmployeeId);
+    if (isManagerRole(requester.role)) {
+      const hasAccess = await managerHasAccessToEmployee(requester.userId, parsedEmployeeId);
       if (!hasAccess) {
         throw new CustomError('Accès refusé', 403);
       }
