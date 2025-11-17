@@ -3,7 +3,7 @@ import { AbsenceType, ApprovalStatus } from '@prisma/client';
 import prisma from '../config/database';
 import { CustomError } from '../middlewares/error.middleware';
 import { createAuditLog } from '../utils/audit';
-import { managerHasAccessToEmployee } from '../utils/access';
+import { managerHasAccessToEmployee, getManagedUnitIds } from '../utils/access';
 import { isAdminRole, isManagerRole } from '../utils/roles';
 
 const computeInclusiveDays = (start: Date, end: Date): number => {
@@ -27,11 +27,17 @@ export const getAllAbsences = async (req: Request, res: Response): Promise<void>
     const where: any = {};
 
     if (isManagerRole(requester.role)) {
-      where.employee = {
-        organizationalUnit: {
-          managerId: requester.userId,
-        },
-      };
+      const managedUnitIds = await getManagedUnitIds(requester.userId);
+      if (managedUnitIds.length > 0) {
+        where.employee = {
+          organizationalUnitId: {
+            in: managedUnitIds,
+          },
+        };
+      } else {
+        // Si le manager n'a aucune unité assignée, retourner un tableau vide
+        where.id = -1; // Condition impossible pour retourner aucun résultat
+      }
     }
 
     const absences = await prisma.absence.findMany({
@@ -77,9 +83,28 @@ export const getAbsencesByEmployee = async (req: Request, res: Response): Promis
       throw new CustomError('Identifiant employé invalide', 400);
     }
 
-    if (isManagerRole(requester.role)) {
-      const hasAccess = await managerHasAccessToEmployee(requester.userId, parsedEmployeeId);
-      if (!hasAccess) {
+    // Vérifier si l'utilisateur est admin
+    if (isAdminRole(requester.role)) {
+      // Les admins ont accès à tout
+    } else {
+      // Vérifier d'abord si l'utilisateur consulte ses propres absences
+      const ownEmployee = await prisma.employee.findFirst({
+        where: {
+          userId: requester.userId,
+          id: parsedEmployeeId,
+        },
+      });
+
+      if (ownEmployee) {
+        // L'utilisateur consulte ses propres absences, autoriser
+      } else if (isManagerRole(requester.role)) {
+        // Vérifier si le manager a accès à cet employé
+        const hasAccess = await managerHasAccessToEmployee(requester.userId, parsedEmployeeId);
+        if (!hasAccess) {
+          throw new CustomError('Accès refusé', 403);
+        }
+      } else {
+        // Utilisateur normal essayant d'accéder aux absences d'un autre employé
         throw new CustomError('Accès refusé', 403);
       }
     }
@@ -302,6 +327,24 @@ export const updateAbsence = async (req: Request, res: Response): Promise<void> 
   }
 };
 
+const mapApprovalStatus = (value?: string | null): ApprovalStatus | undefined => {
+  if (!value) return undefined;
+  const normalized = value.toString().toUpperCase();
+  switch (normalized) {
+    case 'EN_ATTENTE':
+    case 'PENDING':
+      return ApprovalStatus.EN_ATTENTE;
+    case 'APPROUVE':
+    case 'APPROVED':
+      return ApprovalStatus.APPROUVE;
+    case 'REJETE':
+    case 'REJECTED':
+      return ApprovalStatus.REJETE;
+    default:
+      return undefined;
+  }
+};
+
 export const approveAbsence = async (req: Request, res: Response): Promise<void> => {
   try {
     const requester = req.user;
@@ -312,8 +355,9 @@ export const approveAbsence = async (req: Request, res: Response): Promise<void>
     const { id } = req.params;
     const { status, approvedBy } = req.body;
 
-    if (!Object.values(ApprovalStatus).includes(status as ApprovalStatus)) {
-      throw new CustomError('Statut invalide', 400);
+    const mappedStatus = mapApprovalStatus(status);
+    if (!mappedStatus) {
+      throw new CustomError('Statut invalide. Utilisez APPROUVE, REJETE, APPROVED ou REJECTED', 400);
     }
 
     const oldAbsence = await prisma.absence.findUnique({
@@ -324,17 +368,23 @@ export const approveAbsence = async (req: Request, res: Response): Promise<void>
       throw new CustomError('Absence non trouvée', 404);
     }
 
-    if (isManagerRole(requester.role)) {
+    // Vérifier les permissions : admins ont accès à tout, managers seulement à leur équipe
+    if (isAdminRole(requester.role)) {
+      // Les admins ont accès à tout
+    } else if (isManagerRole(requester.role)) {
       const hasAccess = await managerHasAccessToEmployee(requester.userId, oldAbsence.employeeId);
       if (!hasAccess) {
         throw new CustomError('Accès refusé', 403);
       }
+    } else {
+      // Les utilisateurs normaux ne peuvent pas approuver
+      throw new CustomError('Accès refusé', 403);
     }
 
     const absence = await prisma.absence.update({
       where: { id: parseInt(id) },
       data: {
-        status: status as ApprovalStatus,
+        status: mappedStatus,
         approvedBy: approvedBy ? parseInt(approvedBy) : requester.userId,
         approvedAt: new Date(),
       },
@@ -346,7 +396,7 @@ export const approveAbsence = async (req: Request, res: Response): Promise<void>
 
     await createAuditLog({
       userId: requester.userId,
-      action: status === ApprovalStatus.APPROUVE ? 'APPROVE' : 'REJECT',
+      action: mappedStatus === ApprovalStatus.APPROUVE ? 'APPROVE' : 'REJECT',
       modelType: 'Absence',
       modelId: absence.id,
       oldValue: oldAbsence,
@@ -356,7 +406,7 @@ export const approveAbsence = async (req: Request, res: Response): Promise<void>
     });
 
     res.json({
-      message: `Absence ${status === ApprovalStatus.APPROUVE ? 'approuvée' : 'rejetée'} avec succès`,
+      message: `Absence ${mappedStatus === ApprovalStatus.APPROUVE ? 'approuvée' : 'rejetée'} avec succès`,
       data: absence,
     });
   } catch (error) {

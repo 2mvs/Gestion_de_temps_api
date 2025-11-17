@@ -8,7 +8,7 @@ import {
   calculateHoursWorked,
   autoCreateOvertimeAndSpecialHours,
 } from '../utils/overtimeCalculator';
-import { isManagerRole } from '../utils/roles'
+import { isManagerRole, isAdminRole } from '../utils/roles';
 
 const mapTimeEntryStatus = (value: string): TimeEntryStatus => {
   const normalized = value.toString().toUpperCase();
@@ -43,9 +43,28 @@ export const getTimeEntriesByEmployee = async (req: Request, res: Response): Pro
       throw new CustomError('Identifiant employé invalide', 400);
     }
 
-    if (isManagerRole(requester.role)) {
-      const hasAccess = await managerHasAccessToEmployee(requester.userId, parsedEmployeeId);
-      if (!hasAccess) {
+    // Vérifier si l'utilisateur est admin
+    if (isAdminRole(requester.role)) {
+      // Les admins ont accès à tout
+    } else {
+      // Vérifier d'abord si l'utilisateur consulte ses propres pointages
+      const ownEmployee = await prisma.employee.findFirst({
+        where: {
+          userId: requester.userId,
+          id: parsedEmployeeId,
+        },
+      });
+
+      if (ownEmployee) {
+        // L'utilisateur consulte ses propres pointages, autoriser
+      } else if (isManagerRole(requester.role)) {
+        // Vérifier si le manager a accès à cet employé
+        const hasAccess = await managerHasAccessToEmployee(requester.userId, parsedEmployeeId);
+        if (!hasAccess) {
+          throw new CustomError('Accès refusé', 403);
+        }
+      } else {
+        // Utilisateur normal essayant d'accéder aux pointages d'un autre employé
         throw new CustomError('Accès refusé', 403);
       }
     }
@@ -368,24 +387,30 @@ export const updateTimeEntry = async (req: Request, res: Response): Promise<void
       throw new CustomError("L'heure de sortie doit être après l'heure d'entrée", 400);
     }
 
+    // Déterminer les valeurs finales (existantes + mises à jour)
+    const finalClockIn = updates.clockIn !== undefined ? updates.clockIn : timeEntry.clockIn;
+    const finalClockOut = updates.clockOut !== undefined ? updates.clockOut : timeEntry.clockOut;
+
     if (totalHours !== undefined) {
       const parsedTotalHours = parseFloat(totalHours);
       if (Number.isNaN(parsedTotalHours) || parsedTotalHours < 0) {
         throw new CustomError('Total heures invalide', 400);
       }
       updates.totalHours = Math.round(parsedTotalHours * 100) / 100;
-    } else if (updates.clockIn && updates.clockOut) {
+    } else if (finalClockIn && finalClockOut) {
       const diff =
-        (updates.clockOut.getTime() - updates.clockIn.getTime()) /
+        (finalClockOut.getTime() - finalClockIn.getTime()) /
         (1000 * 60 * 60);
       updates.totalHours = Math.round(diff * 100) / 100;
     }
 
     if (status) {
       updates.status = mapTimeEntryStatus(status);
-    } else if (updates.clockIn && updates.clockOut) {
+    } else if (finalClockIn && finalClockOut) {
+      // Les deux heures sont présentes, le pointage est terminé
       updates.status = TimeEntryStatus.TERMINE;
-    } else if (updates.clockIn || updates.clockOut) {
+    } else if (finalClockIn || finalClockOut) {
+      // Une seule heure est présente, le pointage est incomplet
       updates.status = TimeEntryStatus.INCOMPLET;
     }
 

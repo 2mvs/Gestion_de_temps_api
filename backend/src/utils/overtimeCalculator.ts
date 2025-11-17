@@ -148,6 +148,10 @@ export async function calculateHoursWorked(
   }
 
   const slots = schedule.slots || [];
+  const theoreticalMinutesRequired =
+    schedule.theoreticalDayHours && schedule.theoreticalDayHours > 0
+      ? Math.round(schedule.theoreticalDayHours * 60)
+      : 8 * 60;
 
   const withinStart = Math.max(clockInMinutes, scheduledStart);
   const withinEnd = Math.min(clockOutMinutes, scheduledEnd);
@@ -254,6 +258,17 @@ export async function calculateHoursWorked(
   if (overtimeMinutes < 0) overtimeMinutes = 0;
   if (specialMinutes < 0) specialMinutes = 0;
   if (breakMinutes < 0) breakMinutes = 0;
+
+  // Condition: les heures supplémentaires s'appliquent uniquement après avoir atteint l'objectif théorique
+  if (theoreticalMinutesRequired > 0) {
+    const productiveMinutes = normalMinutes + overtimeMinutes + specialMinutes;
+    const missingMinutes = Math.max(0, theoreticalMinutesRequired - productiveMinutes);
+    if (missingMinutes > 0 && overtimeMinutes > 0) {
+      const reclassified = Math.min(overtimeMinutes, missingMinutes);
+      overtimeMinutes -= reclassified;
+      normalMinutes += reclassified;
+    }
+  }
 
   const normalHours = minutesToHours(normalMinutes);
   const overtimeHours = minutesToHours(overtimeMinutes);

@@ -11,7 +11,7 @@ import {
 import prisma from '../config/database';
 import { CustomError } from '../middlewares/error.middleware';
 import { createAuditLog } from '../utils/audit';
-import { managerHasAccessToEmployee, managerHasAccessToUnit } from '../utils/access';
+import { managerHasAccessToEmployee, managerHasAccessToUnit, getManagedUnitIds } from '../utils/access';
 import { isManagerRole } from '../utils/roles';
 import { calculateHoursWorked } from '../utils/overtimeCalculator';
 
@@ -172,6 +172,13 @@ export const getEmployeePayslip = async (req: Request, res: Response): Promise<v
           organizationalUnit: employee.organizationalUnit,
           contractType: employee.contractType,
           hireDate: employee.hireDate,
+          workCycle: employee.workCycle
+            ? {
+                id: employee.workCycle.id,
+                label: employee.workCycle.label,
+                abbreviation: employee.workCycle.abbreviation,
+              }
+            : null,
         },
         period: {
           startDate: start,
@@ -207,9 +214,15 @@ export const getAllEmployees = async (req: Request, res: Response): Promise<void
     };
 
     if (isManagerRole(requester.role)) {
-      where.organizationalUnit = {
-        managerId: requester.userId,
-      };
+      const managedUnitIds = await getManagedUnitIds(requester.userId);
+      if (managedUnitIds.length > 0) {
+        where.organizationalUnitId = {
+          in: managedUnitIds,
+        };
+      } else {
+        // Si le manager n'a aucune unité assignée, retourner un tableau vide
+        where.id = -1; // Condition impossible pour retourner aucun résultat
+      }
     }
 
     const employees = await prisma.employee.findMany({
