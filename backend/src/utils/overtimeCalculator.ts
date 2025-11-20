@@ -328,7 +328,7 @@ export async function autoCreateOvertimeAndSpecialHours(
           employeeId,
           date: new Date(date),
           hours: Math.round(overtimeHours * 100) / 100,
-          reason: `Calcul automatique basé sur l'horaire (${breakdown.overtime.toFixed(2)}h sup + ${breakdown.nightShift.toFixed(2)}h nuit)`,
+          reason: null,
           status: ApprovalStatus.EN_ATTENTE,
         },
       });
@@ -368,7 +368,7 @@ export async function autoCreateOvertimeAndSpecialHours(
           date: new Date(date),
           hours: Math.round(specialHours * 100) / 100,
           hourType,
-          reason: `Calcul automatique: ${breakdown.sunday > 0 ? `${breakdown.sunday.toFixed(2)}h dimanche` : ''} ${breakdown.holiday > 0 ? `${breakdown.holiday.toFixed(2)}h férié` : ''} ${breakdown.other > 0 ? `${breakdown.other.toFixed(2)}h autres` : ''}`,
+          reason: null,
           status: ApprovalStatus.EN_ATTENTE,
         },
       });

@@ -97,7 +97,43 @@ export const getTimeEntriesByEmployee = async (req: Request, res: Response): Pro
       },
     });
 
-    res.json({ data: timeEntries });
+    // Si includeCalculations est true, calculer les heures pour chaque pointage
+    let enrichedEntries = timeEntries;
+    if (includeCalculations === 'true' || includeCalculations === true) {
+      const { calculateHoursWorked } = await import('../utils/overtimeCalculator');
+      enrichedEntries = await Promise.all(
+        timeEntries.map(async (entry) => {
+          if (!entry.clockIn || !entry.clockOut) {
+            return {
+              ...entry,
+              calculatedHours: null,
+            };
+          }
+
+          try {
+            const calculated = await calculateHoursWorked({
+              employeeId: parsedEmployeeId,
+              clockInTime: entry.clockIn,
+              clockOutTime: entry.clockOut,
+              date: entry.date,
+            });
+
+            return {
+              ...entry,
+              calculatedHours: calculated,
+            };
+          } catch (error: any) {
+            console.error(`Erreur calcul heures pour entry ${entry.id}:`, error);
+            return {
+              ...entry,
+              calculatedHours: null,
+            };
+          }
+        })
+      );
+    }
+
+    res.json({ data: enrichedEntries });
   } catch (error) {
     throw error;
   }
