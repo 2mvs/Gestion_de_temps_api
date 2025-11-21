@@ -99,7 +99,11 @@ export const getTimeEntriesByEmployee = async (req: Request, res: Response): Pro
 
     // Si includeCalculations est true, calculer les heures pour chaque pointage
     let enrichedEntries = timeEntries;
-    if (includeCalculations === 'true' || includeCalculations === true) {
+    const shouldIncludeCalculations = 
+      includeCalculations === 'true' || 
+      includeCalculations === '1' ||
+      String(includeCalculations).toLowerCase() === 'true';
+    if (shouldIncludeCalculations) {
       const { calculateHoursWorked } = await import('../utils/overtimeCalculator');
       enrichedEntries = await Promise.all(
         timeEntries.map(async (entry) => {
