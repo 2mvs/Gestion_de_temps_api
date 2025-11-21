@@ -22,15 +22,5 @@
       "maxDuration": 30,
       "memory": 1024
     }
-  },
-  "ignore": [
-    "node_modules",
-    ".git",
-    "src",
-    "*.md",
-    "*.txt",
-    "*.bat",
-    "tsconfig.json",
-    "test-import-employees.csv"
-  ]
+  }
 }
