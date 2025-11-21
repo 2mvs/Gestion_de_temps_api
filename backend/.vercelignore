@@ -3,5 +3,4 @@ node_modules
 *.md
 *.txt
 *.bat
-tsconfig.json
 test-import-employees.csv
