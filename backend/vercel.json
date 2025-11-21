@@ -1,0 +1,36 @@
+{
+  "version": 2,
+  "buildCommand": "npm run build && npm run prisma:generate",
+  "outputDirectory": ".",
+  "installCommand": "npm install",
+  "framework": null,
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/index.js"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/api/index.js"
+    }
+  ],
+  "env": {
+    "NODE_ENV": "production"
+  },
+  "functions": {
+    "api/index.js": {
+      "maxDuration": 30,
+      "memory": 1024
+    }
+  },
+  "ignore": [
+    "node_modules",
+    ".git",
+    "src",
+    "*.md",
+    "*.txt",
+    "*.bat",
+    "tsconfig.json",
+    "test-import-employees.csv"
+  ]
+}
